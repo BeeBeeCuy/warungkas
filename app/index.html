@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>WarungKas</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app" class="app-container">
+
+    <!-- LAYAR SETUP PERTAMA KALI -->
+    <section id="view-setup" class="view hidden">
+      <div class="card auth-card">
+        <div class="brand-header">
+          <div class="brand-badge">WK</div>
+          <h1 class="brand-title">WarungKas</h1>
+          <p class="brand-sub">Setup Awal Toko & Pemilik</p>
+        </div>
+        <form id="form-setup" class="form-vertical" autocomplete="off">
+          <div class="form-group">
+            <label for="setup-nama-warung">Nama Warung</label>
+            <input type="text" id="setup-nama-warung" class="form-input" placeholder="Contoh: Warung Madura Berkah" required>
+          </div>
+          <div class="form-group">
+            <label for="setup-nama-pemilik">Nama Pemilik</label>
+            <input type="text" id="setup-nama-pemilik" class="form-input" placeholder="Contoh: Cak Hasan" required>
+          </div>
+          <div class="form-group">
+            <label for="setup-pin-pemilik">PIN Pemilik (4–6 Angka)</label>
+            <input type="password" id="setup-pin-pemilik" class="form-input text-center" inputmode="numeric" maxlength="6" pattern="[0-9]{4,6}" placeholder="••••" required>
+            <small class="form-hint">Digunakan untuk akses penuh dan tindakan sensitif.</small>
+          </div>
+          <div class="form-group">
+            <label for="setup-pin-pemilik-konfirmasi">Ulangi PIN Pemilik</label>
+            <input type="password" id="setup-pin-pemilik-konfirmasi" class="form-input text-center" inputmode="numeric" maxlength="6" pattern="[0-9]{4,6}" placeholder="••••" required>
+          </div>
+          <div id="setup-error" class="alert-error hidden"></div>
+          <button type="submit" id="btn-submit-setup" class="btn btn-primary btn-block">Simpan & Mulai</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- LAYAR LOGIN PIN -->
+    <section id="view-login" class="view hidden">
+      <div class="card auth-card">
+        <div class="brand-header">
+          <div class="brand-badge">WK</div>
+          <h1 id="login-warung-title" class="brand-title">WarungKas</h1>
+          <p class="brand-sub">Masuk Petugas Kasir</p>
+        </div>
+
+        <div class="form-group">
+          <label for="login-select-user">Pilih Pengguna</label>
+          <select id="login-select-user" class="form-input"></select>
+        </div>
+
+        <div class="pin-display-wrapper">
+          <div id="pin-dots" class="pin-dots">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+          </div>
+          <input type="password" id="login-pin-input" class="visually-hidden" inputmode="numeric" maxlength="6" readonly>
+        </div>
+
+        <div id="login-lockout-msg" class="alert-warning hidden">
+          Akses terkunci karena 5x salah PIN.<br>Tunggu <span id="lockout-timer" class="font-bold">60</span> detik.
+        </div>
+        <div id="login-error-msg" class="alert-error hidden"></div>
+
+        <!-- KEYPAD ANGKA BESAR (MINIMAL 48PX) -->
+        <div class="keypad" id="login-keypad">
+          <button type="button" class="btn-key" data-key="1">1</button>
+          <button type="button" class="btn-key" data-key="2">2</button>
+          <button type="button" class="btn-key" data-key="3">3</button>
+          <button type="button" class="btn-key" data-key="4">4</button>
+          <button type="button" class="btn-key" data-key="5">5</button>
+          <button type="button" class="btn-key" data-key="6">6</button>
+          <button type="button" class="btn-key" data-key="7">7</button>
+          <button type="button" class="btn-key" data-key="8">8</button>
+          <button type="button" class="btn-key" data-key="9">9</button>
+          <button type="button" class="btn-key btn-key-action" data-key="clear">C</button>
+          <button type="button" class="btn-key" data-key="0">0</button>
+          <button type="button" class="btn-key btn-key-action" data-key="backspace">⌫</button>
+        </div>
+
+        <button type="button" id="btn-login-submit" class="btn btn-primary btn-block mt-3">Masuk</button>
+      </div>
+    </section>
+
+    <!-- LAYAR UTAMA (BERANDA) -->
+    <section id="view-dashboard" class="view hidden">
+      <header class="top-nav">
+        <div class="nav-brand">
+          <div class="nav-title" id="dash-warung-name">WarungKas</div>
+          <div class="nav-user" id="dash-user-label">Petugas: -</div>
+        </div>
+        <button type="button" id="btn-logout" class="btn btn-secondary btn-sm">Keluar</button>
+      </header>
+
+      <main class="content-body">
+        <div class="welcome-banner">
+          <h2 id="dash-greeting">Selamat Bekerja</h2>
+          <p class="text-muted">Gunakan menu di bawah ini untuk memulai transaksi kasir.</p>
+        </div>
+
+        <!-- KISI MENU UTAMA -->
+        <div class="menu-grid">
+          <div class="menu-card menu-card-disabled">
+            <div class="menu-icon">🛒</div>
+            <div class="menu-label">Kasir</div>
+            <span class="badge-stage">Tahap 3</span>
+          </div>
+
+          <div class="menu-card menu-card-disabled">
+            <div class="menu-icon">📦</div>
+            <div class="menu-label">Produk & Stok</div>
+            <span class="badge-stage">Tahap 2</span>
+          </div>
+
+          <div class="menu-card menu-card-disabled">
+            <div class="menu-icon">📖</div>
+            <div class="menu-label">Buku Bon</div>
+            <span class="badge-stage">Tahap 4</span>
+          </div>
+
+          <div class="menu-card menu-card-disabled">
+            <div class="menu-icon">⏱️</div>
+            <div class="menu-label">Shift Kasir</div>
+            <span class="badge-stage">Tahap 5</span>
+          </div>
+
+          <div class="menu-card menu-card-disabled">
+            <div class="menu-icon">📊</div>
+            <div class="menu-label">Laporan</div>
+            <span class="badge-stage">Tahap 5</span>
+          </div>
+
+          <div class="menu-card" id="menu-pengaturan">
+            <div class="menu-icon">⚙️</div>
+            <div class="menu-label">Pengaturan</div>
+            <span class="badge-stage badge-active">Tersedia</span>
+          </div>
+        </div>
+      </main>
+    </section>
+
+    <!-- LAYAR PENGATURAN (KHUSUS PEMILIK) -->
+    <section id="view-pengaturan" class="view hidden">
+      <header class="top-nav">
+        <button type="button" id="btn-back-to-dash" class="btn btn-secondary btn-sm">← Beranda</button>
+        <div class="nav-title">Pengaturan Sistem</div>
+        <div style="width: 70px;"></div>
+      </header>
+
+      <main class="content-body">
+        <div class="card mb-4">
+          <h3 class="card-title">Identitas Warung</h3>
+          <form id="form-update-warung" class="form-vertical">
+            <div class="form-group">
+              <label for="input-edit-warung-name">Nama Warung</label>
+              <input type="text" id="input-edit-warung-name" class="form-input" required>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Simpan Nama Warung</button>
+          </form>
+        </div>
+
+        <div class="card mb-4">
+          <h3 class="card-title">Tambah Kasir Baru</h3>
+          <form id="form-tambah-kasir" class="form-vertical" autocomplete="off">
+            <div class="form-group">
+              <label for="input-kasir-nama">Nama Kasir</label>
+              <input type="text" id="input-kasir-nama" class="form-input" placeholder="Contoh: Slamet" required>
+            </div>
+            <div class="form-group">
+              <label for="input-kasir-pin">PIN Kasir (4–6 Angka)</label>
+              <input type="password" id="input-kasir-pin" class="form-input text-center" inputmode="numeric" maxlength="6" pattern="[0-9]{4,6}" placeholder="••••" required>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Daftarkan Kasir</button>
+          </form>
+        </div>
+
+        <div class="card mb-4">
+          <h3 class="card-title">Daftar Pengguna Sistem</h3>
+          <div class="table-responsive">
+            <table class="data-table" id="table-user-list">
+              <thead>
+                <tr>
+                  <th>Nama</th>
+                  <th>Peran</th>
+                  <th>Status</th>
+                  <th>Tindakan</th>
+                </tr>
+              </thead>
+              <tbody id="user-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <h3 class="card-title">Log Aktivitas Terbaru</h3>
+          <div class="table-responsive">
+            <table class="data-table" id="table-log-list">
+              <thead>
+                <tr>
+                  <th>Waktu</th>
+                  <th>Aksi</th>
+                  <th>Detail</th>
+                </tr>
+              </thead>
+              <tbody id="log-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+    </section>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

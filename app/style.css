@@ -663,3 +663,302 @@ label {
 .text-danger { color: var(--danger); }
 .text-xs { font-size: 0.75rem; }
 .text-sm { font-size: 0.85rem; }
+
+/* --- KASIR POS (TAHAP 3) --- */
+.nav-title-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.shift-chip {
+  font-size: 0.7rem;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.pos-body {
+  padding-bottom: 90px; /* Ruang untuk bottom bar */
+}
+
+.btn-cart-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#cart-badge-count {
+  background-color: #0f172a;
+  color: var(--primary);
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+
+.pos-product-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.pos-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  cursor: pointer;
+  min-height: 100px;
+  transition: border-color 0.15s, transform 0.1s;
+}
+
+.pos-card:active {
+  transform: scale(0.97);
+  border-color: var(--primary);
+}
+
+.pos-card-nama {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-main);
+  line-height: 1.25;
+  margin-bottom: 6px;
+}
+
+.pos-card-price {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.pos-card-stock {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.pos-bottom-bar {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 480px;
+  background-color: #172033;
+  border-top: 1px solid var(--border-color);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 20;
+}
+
+.bottom-bar-left {
+  display: flex;
+  flex-direction: column;
+}
+
+.bottom-bar-price {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.btn-bayar {
+  min-width: 140px;
+}
+
+/* --- STEPPER & MODAL UNIT PICKER --- */
+.unit-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.unit-radio-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.unit-radio-card.selected {
+  border-color: var(--primary);
+  background-color: rgba(245, 158, 11, 0.15);
+}
+
+.stepper-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stepper-btn {
+  width: 52px;
+  min-height: 52px;
+  font-size: 1.5rem;
+  font-weight: 700;
+  padding: 0;
+}
+
+.stepper-input {
+  font-size: 1.4rem;
+  font-weight: 700;
+  min-height: 52px;
+}
+
+/* --- KERANJANG SHEET & ITEM --- */
+.modal-cart-card {
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.cart-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  max-height: 50vh;
+  padding-right: 4px;
+}
+
+.cart-item-row {
+  background-color: var(--bg-input);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cart-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.cart-item-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.cart-item-unit {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.cart-item-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cart-stepper-sm {
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  font-size: 1.1rem;
+}
+
+.cart-qty-val {
+  font-size: 0.95rem;
+  font-weight: 700;
+  min-width: 24px;
+  text-align: center;
+}
+
+.cart-summary-box {
+  border-top: 1px solid var(--border-color);
+  padding-top: 12px;
+}
+
+/* --- LAYAR PEMBAYARAN --- */
+.modal-payment-card {
+  max-height: 92vh;
+  overflow-y: auto;
+}
+
+.bill-display {
+  background-color: #172033;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  text-align: center;
+}
+
+.bill-amount {
+  font-size: 1.7rem;
+  font-weight: 800;
+  color: var(--primary);
+  margin: 4px 0;
+}
+
+.pay-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.pay-badge-unpaid {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  border: 1px solid var(--danger);
+}
+
+.pay-badge-paid {
+  background-color: rgba(16, 185, 129, 0.2);
+  color: #6ee7b7;
+  border: 1px solid var(--success);
+}
+
+.pay-methods-accordion {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pay-method-box {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 12px;
+}
+
+.quick-cash-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.quick-cash-row .btn-quick-cash {
+  min-height: 36px;
+  padding: 4px 6px;
+  font-size: 0.8rem;
+}
+
+.success-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background-color: rgba(16, 185, 129, 0.2);
+  border: 2px solid var(--success);
+  color: var(--success);
+  font-size: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 12px;
+}

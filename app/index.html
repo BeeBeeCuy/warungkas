@@ -112,10 +112,11 @@
         </div>
 
         <div class="menu-grid">
-          <div class="menu-card menu-card-disabled">
+          <!-- TAHAP 3: MENU KASIR DIAKTIFKAN -->
+          <div class="menu-card" id="menu-kasir">
             <div class="menu-icon">🛒</div>
-            <div class="menu-label">Kasir</div>
-            <span class="badge-stage">Tahap 3</span>
+            <div class="menu-label">Kasir POS</div>
+            <span class="badge-stage badge-active">Tersedia</span>
           </div>
 
           <!-- TAHAP 2: MENU PRODUK & STOK DIAKTIFKAN -->
@@ -151,6 +152,260 @@
         </div>
       </main>
     </section>
+
+    <!-- LAYAR KASIR POS (TAHAP 3) -->
+    <section id="view-kasir" class="view hidden">
+      <header class="top-nav">
+        <button type="button" id="btn-kasir-back" class="btn btn-secondary btn-sm">← Beranda</button>
+        <div class="nav-title-center">
+          <div class="nav-title">Kasir Penjualan</div>
+          <div id="kasir-shift-chip" class="shift-chip">Shift: -</div>
+        </div>
+        <button type="button" id="btn-open-cart" class="btn btn-primary btn-sm btn-cart-badge">
+          🛒 <span id="cart-badge-count">0</span>
+        </button>
+      </header>
+
+      <main class="content-body pos-body">
+        <div class="search-box mb-2">
+          <input type="text" id="input-kasir-search" class="form-input" placeholder="Cari nama produk kasir..." autocomplete="off">
+        </div>
+
+        <div class="category-chips mb-2" id="chips-kasir-kategori">
+          <button type="button" class="chip active" data-kat="SEMUA">Semua</button>
+          <button type="button" class="chip" data-kat="Sembako">Sembako</button>
+          <button type="button" class="chip" data-kat="Rokok">Rokok</button>
+          <button type="button" class="chip" data-kat="Minuman">Minuman</button>
+          <button type="button" class="chip" data-kat="Makanan & Camilan">Makanan</button>
+          <button type="button" class="chip" data-kat="Kebutuhan Rumah">Rumah</button>
+          <button type="button" class="chip" data-kat="Pulsa & Token">Pulsa</button>
+          <button type="button" class="chip" data-kat="Lainnya">Lainnya</button>
+        </div>
+
+        <div id="kasir-product-grid" class="pos-product-grid"></div>
+      </main>
+
+      <!-- BAR KERANJANG BAWAH (RINGKASAN CEPAT ≤10 DETIK) -->
+      <footer id="kasir-bottom-bar" class="pos-bottom-bar">
+        <div class="bottom-bar-left">
+          <span class="text-xs text-muted">Total Belanja (<span id="bottom-bar-items">0 item</span>)</span>
+          <div id="bottom-bar-total" class="bottom-bar-price">Rp 0</div>
+        </div>
+        <button type="button" id="btn-bottom-bayar" class="btn btn-primary btn-bayar" disabled>Bayar Sekarang</button>
+      </footer>
+    </section>
+
+    <!-- MODAL / BOTTOM SHEET KERANJANG BELANJA -->
+    <div id="modal-cart" class="modal-overlay hidden">
+      <div class="modal-card modal-cart-card">
+        <div class="flex-between mb-2">
+          <h3 class="card-title mb-0">Keranjang Belanja</h3>
+          <button type="button" id="btn-close-cart" class="btn btn-secondary btn-sm">Tutup</button>
+        </div>
+
+        <div id="cart-items-container" class="cart-items-list"></div>
+
+        <div class="cart-summary-box mt-3">
+          <div class="flex-between mb-2">
+            <span class="font-bold text-muted">Total Pembayaran</span>
+            <span id="cart-modal-total" class="font-bold text-amber" style="font-size: 1.3rem;">Rp 0</span>
+          </div>
+          <button type="button" id="btn-lanjut-pembayaran" class="btn btn-primary btn-block">Lanjut ke Pembayaran</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: PILIH SATUAN & JUMLAH (POPUP SAAT KETUK PRODUK DI KASIR) -->
+    <div id="modal-picker" class="modal-overlay hidden">
+      <div class="modal-card">
+        <h3 id="picker-prod-nama" class="card-title mb-1">Nama Produk</h3>
+        <p id="picker-prod-stok" class="text-xs text-muted mb-3">Stok tersedia: -</p>
+
+        <div class="form-group mb-3">
+          <label>Pilih Satuan Jual</label>
+          <div id="picker-unit-options" class="unit-radio-group"></div>
+        </div>
+
+        <div class="form-group mb-3">
+          <label>Jumlah Beli</label>
+          <div class="stepper-row">
+            <button type="button" id="btn-picker-minus" class="btn btn-secondary stepper-btn">−</button>
+            <input type="number" id="input-picker-qty" class="form-input text-center stepper-input" min="1" step="1" value="1">
+            <button type="button" id="btn-picker-plus" class="btn btn-secondary stepper-btn">+</button>
+          </div>
+        </div>
+
+        <div id="picker-stok-warning" class="alert-warning text-xs mb-3 hidden">
+          ⚠️ Jumlah beli melebihi saldo stok dasar! Penjualan tetap boleh dilanjutkan (akan tercatat stok lewat).
+        </div>
+
+        <div class="flex-between mb-3">
+          <span class="text-sm text-muted">Subtotal:</span>
+          <span id="picker-subtotal" class="font-bold text-amber" style="font-size: 1.15rem;">Rp 0</span>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" id="btn-close-picker" class="btn btn-secondary flex-1">Batal</button>
+          <button type="button" id="btn-picker-add" class="btn btn-primary flex-1">Tambah ke Keranjang</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: PEMBAYARAN & INVARIAN KETAT -->
+    <div id="modal-payment" class="modal-overlay hidden">
+      <div class="modal-card modal-payment-card">
+        <div class="flex-between mb-2">
+          <h3 class="card-title mb-0">Pembayaran Tagihan</h3>
+          <button type="button" id="btn-close-payment" class="btn btn-secondary btn-sm">Batal</button>
+        </div>
+
+        <div class="bill-display mb-3">
+          <span class="text-xs text-muted">Total Yang Harus Dibayar:</span>
+          <div id="pay-total-tagihan" class="bill-amount">Rp 0</div>
+          <div id="pay-status-badge" class="pay-badge pay-badge-unpaid">Sisa Tagihan: Rp 0</div>
+        </div>
+
+        <div class="pay-methods-accordion">
+          <!-- 1. TUNAI -->
+          <div class="pay-method-box">
+            <div class="flex-between mb-2">
+              <span class="font-bold">1. Uang Tunai (Cash)</span>
+              <span id="pay-tunai-applied" class="text-xs font-bold text-amber">Terhitung: Rp 0</span>
+            </div>
+            <div class="form-group mb-2">
+              <label for="input-pay-tunai-received">Uang Fisik Diterima (Rp)</label>
+              <input type="number" id="input-pay-tunai-received" class="form-input" min="0" step="1" placeholder="0">
+            </div>
+            <div class="quick-cash-row mb-2">
+              <button type="button" class="btn btn-secondary btn-sm btn-quick-cash" data-cash="pas">Pas</button>
+              <button type="button" class="btn btn-secondary btn-sm btn-quick-cash" data-cash="5000">5rb</button>
+              <button type="button" class="btn btn-secondary btn-sm btn-quick-cash" data-cash="10000">10rb</button>
+              <button type="button" class="btn btn-secondary btn-sm btn-quick-cash" data-cash="20000">20rb</button>
+              <button type="button" class="btn btn-secondary btn-sm btn-quick-cash" data-cash="50000">50rb</button>
+              <button type="button" class="btn btn-secondary btn-sm btn-quick-cash" data-cash="100000">100rb</button>
+              <button type="button" class="btn btn-secondary btn-sm btn-quick-cash" data-cash="clear">Reset</button>
+            </div>
+            <div class="flex-between text-xs text-muted">
+              <span>Kembalian Tunai:</span>
+              <span id="pay-tunai-change" class="font-bold text-main" style="font-size: 0.95rem;">Rp 0</span>
+            </div>
+          </div>
+
+          <!-- 2. QRIS -->
+          <div class="pay-method-box">
+            <div class="flex-between mb-1">
+              <span class="font-bold">2. QRIS (Non-Tunai)</span>
+              <button type="button" id="btn-pay-qris-pas" class="btn btn-secondary btn-sm">Isi Sisa (Pas)</button>
+            </div>
+            <div class="form-group">
+              <label for="input-pay-qris">Nominal QRIS (Rp)</label>
+              <input type="number" id="input-pay-qris" class="form-input" min="0" step="1" placeholder="0">
+            </div>
+          </div>
+
+          <!-- 3. BON / UTANG -->
+          <div class="pay-method-box">
+            <div class="flex-between mb-1">
+              <span class="font-bold">3. Bon / Kredit</span>
+              <button type="button" id="btn-pay-bon-pas" class="btn btn-secondary btn-sm">Isi Sisa (Pas)</button>
+            </div>
+            <div class="form-group mb-2">
+              <label for="input-pay-bon">Nominal Bon (Rp)</label>
+              <input type="number" id="input-pay-bon" class="form-input" min="0" step="1" placeholder="0">
+            </div>
+            <div id="bon-customer-section" class="form-group hidden">
+              <div class="flex-between mb-1">
+                <label for="select-bon-pelanggan">Pilih Pelanggan Bon *</label>
+                <button type="button" id="btn-tambah-pelanggan-bon" class="btn-link-action text-xs text-amber">+ Tambah Baru</button>
+              </div>
+              <select id="select-bon-pelanggan" class="form-input"></select>
+            </div>
+          </div>
+        </div>
+
+        <div id="pay-invariant-error" class="alert-error text-xs mt-3 hidden">
+          Pembayaran belum pas! Total bayar harus tepat sama dengan total belanja.
+        </div>
+
+        <button type="button" id="btn-submit-transaksi" class="btn btn-primary btn-block mt-3" disabled>
+          Simpan Transaksi (Selesai)
+        </button>
+      </div>
+    </div>
+
+    <!-- MODAL: TAMBAH PELANGGAN BON BARU -->
+    <div id="modal-pelanggan-bon" class="modal-overlay hidden">
+      <div class="modal-card">
+        <h3 class="card-title mb-2">Tambah Pelanggan Bon</h3>
+        <form id="form-tambah-pelanggan-bon" class="form-vertical" autocomplete="off">
+          <div class="form-group">
+            <label for="input-pelanggan-nama">Nama Lengkap *</label>
+            <input type="text" id="input-pelanggan-nama" class="form-input" placeholder="Contoh: Pak RT Slamet" required>
+          </div>
+          <div class="form-group">
+            <label for="input-pelanggan-hp">Nomor WhatsApp / HP (Opsional)</label>
+            <input type="tel" id="input-pelanggan-hp" class="form-input" placeholder="08xxxxxxxxxx">
+          </div>
+          <div class="form-group">
+            <label for="input-pelanggan-alamat">Alamat / Keterangan (Opsional)</label>
+            <input type="text" id="input-pelanggan-alamat" class="form-input" placeholder="Contoh: Rumah pojok gang 3">
+          </div>
+          <div class="modal-actions mt-2">
+            <button type="button" id="btn-close-pelanggan-modal" class="btn btn-secondary flex-1">Batal</button>
+            <button type="submit" class="btn btn-primary flex-1">Simpan Pelanggan</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL: GERBANG BUKA SHIFT -->
+    <div id="modal-buka-shift" class="modal-overlay hidden">
+      <div class="modal-card">
+        <h3 class="card-title mb-1">Buka Shift Kasir</h3>
+        <p class="text-xs text-muted mb-3">Sebelum mulai bertransaksi, catat modal kas awal di laci.</p>
+
+        <form id="form-buka-shift" class="form-vertical" autocomplete="off">
+          <div class="form-group">
+            <label for="input-shift-kasir-nama">Petugas Kasir</label>
+            <input type="text" id="input-shift-kasir-nama" class="form-input" readonly>
+          </div>
+          <div class="form-group">
+            <label for="input-shift-modal-awal">Modal Kas Awal di Laci (Rp) *</label>
+            <input type="number" id="input-shift-modal-awal" class="form-input" min="0" step="1" value="0" required>
+            <small class="form-hint">Uang kembalian awal yang ada di laci uang.</small>
+          </div>
+          <div class="modal-actions mt-2">
+            <button type="button" id="btn-cancel-shift" class="btn btn-secondary flex-1">Batal</button>
+            <button type="submit" class="btn btn-primary flex-1">Buka Shift Sekarang</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- LAYAR SUKSES TRANSAKSI -->
+    <div id="modal-success" class="modal-overlay hidden">
+      <div class="modal-card text-center">
+        <div class="success-icon">✓</div>
+        <h2 class="card-title" style="font-size: 1.4rem; color: var(--success);">Transaksi Berhasil!</h2>
+        <div id="success-trx-nomor" class="font-bold text-sm text-muted mb-3">TRX-00000000-000</div>
+
+        <div class="card mb-3 text-left" style="background-color: var(--bg-input);">
+          <div class="flex-between mb-1">
+            <span class="text-xs text-muted">Total Belanja:</span>
+            <span id="success-total" class="font-bold text-amber">Rp 0</span>
+          </div>
+          <div id="success-breakdown" class="text-xs text-muted mb-2"></div>
+          <div id="success-change-row" class="flex-between pt-2" style="border-top: 1px solid var(--border-color);">
+            <span class="font-bold text-sm">Kembalian Tunai:</span>
+            <span id="success-change" class="font-bold" style="font-size: 1.15rem; color: var(--text-main);">Rp 0</span>
+          </div>
+        </div>
+
+        <button type="button" id="btn-transaksi-baru" class="btn btn-primary btn-block">
+          Transaksi Baru (Selesai)
+        </button>
+      </div>
+    </div>
 
     <!-- LAYAR PRODUK & STOK (KATALOG & PENCARIAN) -->
     <section id="view-produk" class="view hidden">

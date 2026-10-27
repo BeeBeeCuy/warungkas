@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0f172a">
+<title>WarungKas — Spike Tahap 0</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<style>
+  *{box-sizing:border-box} body{margin:0;font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;padding:16px}
+  h1{font-size:1.3rem;margin:0 0 4px} .sub{color:#94a3b8;margin:0 0 16px;font-size:.9rem}
+  .card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:14px;margin-bottom:12px}
+  .card h2{font-size:1rem;margin:0 0 8px;color:#f59e0b}
+  .stat{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed #334155;font-size:.95rem}
+  .stat:last-child{border-bottom:none}
+  button{background:#f59e0b;color:#111827;border:none;border-radius:10px;padding:12px 14px;font-size:1rem;font-weight:600;width:100%;margin:6px 0;min-height:48px}
+  button.secondary{background:#334155;color:#e2e8f0}
+  button:active{opacity:.85}
+  #log{background:#020617;border:1px solid #334155;border-radius:10px;padding:10px;font-family:monospace;font-size:.78rem;white-space:pre-wrap;max-height:260px;overflow:auto}
+  .ok{color:#4ade80}.err{color:#f87171}.warn{color:#fbbf24}
+  input[type=file]{width:100%;margin:6px 0;color:#e2e8f0}
+</style>
+</head>
+<body>
+<h1>🐝 WarungKas — Spike Tahap 0</h1>
+<p class="sub">Prototipe pembuktian teknis PRD §10.1: PWA offline, IndexedDB, ekspor/impor cadangan. Bukan aplikasi final.</p>
+
+<div class="card">
+  <h2>Status Perangkat</h2>
+  <div class="stat"><span>Koneksi</span><strong id="stOnline">—</strong></div>
+  <div class="stat"><span>Service Worker</span><strong id="stSw">—</strong></div>
+  <div class="stat"><span>Penyimpanan persisten</span><strong id="stPersist">—</strong></div>
+  <div class="stat"><span>Mode tampilan</span><strong id="stDisplay">—</strong></div>
+  <button class="secondary" id="btnPersist">Minta Penyimpanan Persisten</button>
+</div>
+
+<div class="card">
+  <h2>Uji IndexedDB — Transaksi Contoh</h2>
+  <div class="stat"><span>Jumlah transaksi tersimpan</span><strong id="stCount">—</strong></div>
+  <div class="stat"><span>Total nilai</span><strong id="stTotal">—</strong></div>
+  <button id="btnSeed">＋ Buat 100 Transaksi Contoh</button>
+  <button class="secondary" id="btnRefresh">↻ Baca Ulang Ringkasan</button>
+  <button class="secondary" id="btnClear">🗑 Kosongkan Data Uji</button>
+</div>
+
+<div class="card">
+  <h2>Cadangan Data</h2>
+  <button id="btnExport">⬇ Ekspor Cadangan (JSON)</button>
+  <input type="file" id="fileImport" accept="application/json">
+  <button class="secondary" id="btnImport">⬆ Impor Cadangan Terpilih</button>
+  <p class="sub" style="margin-top:8px">Uji pemulihan: ekspor → kosongkan data → impor file yang sama → jumlah harus kembali persis.</p>
+</div>
+
+<div class="card">
+  <h2>Log Pengujian</h2>
+  <div id="log"></div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const logEl=$('log');
+function log(msg,cls){const t=new Date().toLocaleTimeString('id-ID');logEl.textContent+=`[${t}] ${msg}\n`;logEl.scrollTop=logEl.scrollHeight;if(cls)logEl.lastChild}
+function fmtRp(n){return 'Rp'+n.toLocaleString('id-ID')}
+
+// --- Status koneksi & tampilan ---
+function updOnline(){$('stOnline').textContent=navigator.onLine?'Online':'OFFLINE';$('stOnline').style.color=navigator.onLine?'#4ade80':'#f87171'}
+window.addEventListener('online',updOnline);window.addEventListener('offline',updOnline);updOnline();
+$('stDisplay').textContent=window.matchMedia('(display-mode: standalone)').matches?'Standalone (terinstall)':'Browser biasa';
+
+// --- Service Worker ---
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').then(r=>{$('stSw').textContent='Aktif';log('Service Worker terdaftar. Aplikasi siap offline.');})
+  .catch(e=>{$('stSw').textContent='Gagal';log('Service Worker gagal: '+e.message,'err')});
+}else{$('stSw').textContent='Tidak didukung'}
+
+// --- Persistensi ---
+async function updPersist(){if(navigator.storage&&navigator.storage.persisted){const p=await navigator.storage.persisted();$('stPersist').textContent=p?'Ya (persisten)':'Belum';}else{$('stPersist').textContent='API tidak tersedia'}}
+updPersist();
+$('btnPersist').onclick=async()=>{if(navigator.storage&&navigator.storage.persist){const r=await navigator.storage.persist();log('Permintaan persist() -> '+r);updPersist();}};
+
+// --- IndexedDB ---
+const DB='warungkas-spike',STORE='transaksi';
+function openDb(){return new Promise((res,rej)=>{const rq=indexedDB.open(DB,1);rq.onupgradeneeded=()=>{rq.result.createObjectStore(STORE,{keyPath:'id'})};rq.onsuccess=()=>res(rq.result);rq.onerror=()=>rej(rq.error)})}
+async function dbAll(){const db=await openDb();return new Promise((res,rej)=>{const rq=db.transaction(STORE).objectStore(STORE).getAll();rq.onsuccess=()=>res(rq.result);rq.onerror=()=>rej(rq.error)})}
+async function refresh(){const rows=await dbAll();$('stCount').textContent=rows.length;$('stTotal').textContent=fmtRp(rows.reduce((a,r)=>a+r.total,0));return rows}
+refresh().then(()=>log('IndexedDB terbaca.'));
+
+$('btnSeed').onclick=async()=>{const db=await openDb();const t0=performance.now();await new Promise((res,rej)=>{const tx=db.transaction(STORE,'readwrite');const st=tx.objectStore(STORE);for(let i=0;i<100;i++){st.put({id:crypto.randomUUID(),waktu:new Date(Date.now()-Math.floor(Math.random()*86400000)).toISOString(),total:2000+Math.floor(Math.random()*48000),metode:['tunai','qris','bon'][i%3]})}tx.oncomplete=res;tx.onerror=()=>rej(tx.error)});const dt=Math.round(performance.now()-t0);await refresh();log(`100 transaksi contoh tersimpan atomik dalam ${dt} ms.`)};
+$('btnRefresh').onclick=async()=>{await refresh();log('Ringkasan dibaca ulang dari IndexedDB.')};
+$('btnClear').onclick=async()=>{const db=await openDb();await new Promise((res,rej)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).clear();tx.oncomplete=res;tx.onerror=()=>rej(tx.error)});await refresh();log('Data uji dikosongkan.','warn')};
+
+// --- Ekspor / Impor ---
+$('btnExport').onclick=async()=>{const rows=await dbAll();const data={versi_skema:1,diekspor:new Date().toISOString(),aplikasi:'warungkas-spike',transaksi:rows};const blob=new Blob([JSON.stringify(data)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='warungkas-spike-cadangan.json';a.click();URL.revokeObjectURL(a.href);log(`Cadangan diekspor: ${rows.length} transaksi.`)};
+$('btnImport').onclick=async()=>{const f=$('fileImport').files[0];if(!f){log('Pilih file cadangan dulu.','err');return}
+  try{const data=JSON.parse(await f.text());
+    if(data.versi_skema!==1||!Array.isArray(data.transaksi))throw new Error('Format/versi tidak cocok');
+    const db=await openDb();await new Promise((res,rej)=>{const tx=db.transaction(STORE,'readwrite');const st=tx.objectStore(STORE);st.clear();data.transaksi.forEach(r=>st.put(r));tx.oncomplete=res;tx.onerror=()=>rej(tx.error)});
+    const rows=await refresh();log(`Impor selesai & terverifikasi: ${rows.length} transaksi (file berisi ${data.transaksi.length}).`,'ok');
+  }catch(e){log('Impor DITOLAK, data lama utuh: '+e.message,'err')}};
+</script>
+</body>
+</html>

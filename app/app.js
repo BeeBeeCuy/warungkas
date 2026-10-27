@@ -695,6 +695,12 @@ let cartItems = []; // Array of snapshot objects
 let activePickerProduct = null;
 let selectedPickerUnit = null; // null = satuan dasar
 
+// State Buku Bon (Tahap 4)
+let cachedBonCustomers = [];
+let currentBonSearch = '';
+let activeBonCustomerId = null;
+let activePayingBonId = null;
+
 // --- 2. HELPER UTILITAS UMUM ---
 function generateUUID() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -740,6 +746,17 @@ function getJakartaDateKey() {
   const m = parts.find(p => p.type === 'month').value;
   const day = parts.find(p => p.type === 'day').value;
   return `${y}${m}${day}`;
+}
+
+
+// Normalisasi no hp ke format 62xxx
+function normalizePhoneForWA(phone) {
+  if (!phone) return '';
+  let clean = phone.replace(/[^0-9]/g, '');
+  if (clean.startsWith('0')) {
+    clean = '62' + clean.slice(1);
+  }
+  return clean;
 }
 
 // --- 3. KRIPTOGRAFI (PBKDF2-HMAC-SHA-256) ---
@@ -1115,6 +1132,56 @@ function savePelangganBon(pelanggan) {
     const store = tx.objectStore('pelanggan_bon');
     const req = store.put(pelanggan);
     req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function getTransaksiById(trxId) {
+  return new Promise((resolve, reject) => {
+    const tx = dbInstance.transaction(['transaksi'], 'readonly');
+    const store = tx.objectStore('transaksi');
+    const req = store.get(trxId);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function getPelangganBonById(pelangganId) {
+  return new Promise((resolve, reject) => {
+    const tx = dbInstance.transaction(['pelanggan_bon'], 'readonly');
+    const store = tx.objectStore('pelanggan_bon');
+    const req = store.get(pelangganId);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function getAllBons() {
+  return new Promise((resolve, reject) => {
+    const tx = dbInstance.transaction(['bon'], 'readonly');
+    const store = tx.objectStore('bon');
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function getBonById(bonId) {
+  return new Promise((resolve, reject) => {
+    const tx = dbInstance.transaction(['bon'], 'readonly');
+    const store = tx.objectStore('bon');
+    const req = store.get(bonId);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function getAllPembayaranBon() {
+  return new Promise((resolve, reject) => {
+    const tx = dbInstance.transaction(['pembayaran_bon'], 'readonly');
+    const store = tx.objectStore('pembayaran_bon');
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result || []);
     req.onerror = () => reject(req.error);
   });
 }
@@ -2485,7 +2552,508 @@ async function eksekusiSimpanTransaksi() {
 }
 
 
-// --- 12. EVENT LISTENERS ---
+// --- 12. FITUR TAHAP 4: BUKU BON DIGITAL ---
+
+// Kalkulasi buku bon dari database: memuat semua pelanggan yang pernah punya bon
+async function loadBukuBonData() {
+  const [allPelanggan, allBons, allPayments] = await Promise.all([
+    getAllPelangganBon(),
+    getAllBons(),
+    getAllPembayaranBon()
+  ]);
+
+  // Map pembayaran per bon_id: Σ nominal
+  const paymentByBonId = {};
+  for (const pay of allPayments) {
+    paymentByBonId[pay.bon_id] = (paymentByBonId[pay.bon_id] || 0) + (Number(pay.jumlah) || 0);
+  }
+
+  // Agregasi per pelanggan
+  const pelangganMap = {};
+  for (const p of allPelanggan) {
+    pelangganMap[p.id] = {
+      ...p,
+      total_bon: 0,
+      total_dibayar: 0,
+      sisa_bon: 0,
+      unpaid_count: 0,
+      bons: []
+    };
+  }
+
+  for (const b of allBons) {
+    const totalBayar = paymentByBonId[b.id] || 0;
+    const jumlahBon = Number(b.jumlah) || 0;
+    const sisa = Math.max(0, jumlahBon - totalBayar);
+
+    if (pelangganMap[b.pelanggan_id]) {
+      pelangganMap[b.pelanggan_id].total_bon += jumlahBon;
+      pelangganMap[b.pelanggan_id].total_dibayar += totalBayar;
+      pelangganMap[b.pelanggan_id].sisa_bon += sisa;
+      if (sisa > 0) {
+        pelangganMap[b.pelanggan_id].unpaid_count += 1;
+      }
+      pelangganMap[b.pelanggan_id].bons.push({
+        ...b,
+        sudah_bayar: totalBayar,
+        sisa: sisa
+      });
+    }
+  }
+
+  // Filter: hanya pelanggan yang PERNAH memiliki record bon
+  cachedBonCustomers = Object.values(pelangganMap).filter(p => p.bons.length > 0);
+
+  // Urutkan: sisa bon terbesar di atas, lalu nama A-Z
+  cachedBonCustomers.sort((a, b) => {
+    if (b.sisa_bon !== a.sisa_bon) {
+      return b.sisa_bon - a.sisa_bon;
+    }
+    return a.nama.localeCompare(b.nama);
+  });
+}
+
+async function renderBukuBonScreen() {
+  await loadBukuBonData();
+  filterAndRenderBonCustomers();
+  showView('view-bon');
+}
+
+function filterAndRenderBonCustomers() {
+  const container = document.getElementById('list-pelanggan-bon-container');
+  container.innerHTML = '';
+
+  const kw = currentBonSearch.toLowerCase().trim();
+
+  // Hitung total seluruh sisa bon warung & pelanggan yang masih berutang
+  let totalSemuaBon = 0;
+  let berutangCount = 0;
+
+  cachedBonCustomers.forEach(p => {
+    totalSemuaBon += p.sisa_bon;
+    if (p.sisa_bon > 0) {
+      berutangCount++;
+    }
+  });
+
+  document.getElementById('label-total-semua-bon').textContent = formatRp(totalSemuaBon);
+  const badgeCount = document.getElementById('badge-pelanggan-berutang-count');
+  badgeCount.textContent = `${berutangCount} Pelanggan Berutang`;
+  if (berutangCount > 0) {
+    badgeCount.className = 'badge-warning text-xs';
+  } else {
+    badgeCount.className = 'pay-badge pay-badge-paid text-xs';
+    badgeCount.textContent = 'Semua Lunas';
+  }
+
+  const filtered = cachedBonCustomers.filter(p => {
+    return (!kw || p.nama.toLowerCase().includes(kw));
+  });
+
+  document.getElementById('label-total-pelanggan-bon').textContent = `Menampilkan ${filtered.length} pelanggan`;
+
+  if (cachedBonCustomers.length === 0) {
+    container.innerHTML = `
+      <div class="card text-center text-muted" style="padding: 24px; line-height: 1.5;">
+        Belum ada catatan bon.<br>
+        <span class="text-xs">Bon tercatat otomatis saat transaksi kasir dibayar sebagian/seluruhnya dengan bon.</span>
+      </div>
+    `;
+    return;
+  }
+
+  if (filtered.length === 0) {
+    container.innerHTML = `
+      <div class="card text-center text-muted" style="padding: 24px;">
+        Tidak ada pelanggan bon yang cocok dengan pencarian.
+      </div>
+    `;
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+
+  filtered.forEach(p => {
+    const isLunas = p.sisa_bon <= 0;
+    const item = document.createElement('div');
+    item.className = 'bon-customer-item';
+    item.onclick = () => openBonCustomerDetail(p.id);
+
+    item.innerHTML = `
+      <div class="bon-cust-left">
+        <div class="bon-cust-name">${p.nama}</div>
+        <div class="bon-cust-sub">
+          ${p.no_hp ? '📞 ' + p.no_hp + ' • ' : ''}
+          Total Bon: ${formatRp(p.total_bon)}
+        </div>
+      </div>
+      <div class="bon-cust-right">
+        ${isLunas
+          ? '<span class="pay-badge pay-badge-paid">Lunas</span>'
+          : `<span class="bon-cust-sisa">${formatRp(p.sisa_bon)}</span>
+             <span class="text-xs text-muted">${p.unpaid_count} bon belum lunas</span>`
+        }
+      </div>
+    `;
+
+    fragment.appendChild(item);
+  });
+
+  container.appendChild(fragment);
+}
+
+// Buka Detail Pelanggan Bon
+async function openBonCustomerDetail(pelangganId) {
+  activeBonCustomerId = pelangganId;
+
+  // Muat data segar langsung dari database
+  const [pelanggan, allBons, allPayments] = await Promise.all([
+    getPelangganBonById(pelangganId),
+    getAllBons(),
+    getAllPembayaranBon()
+  ]);
+
+  if (!pelanggan) return;
+
+  // Filter bon pelanggan ini
+  const customerBons = allBons.filter(b => b.pelanggan_id === pelangganId);
+  const bonIdsSet = new Set(customerBons.map(b => b.id));
+
+  // Filter pembayaran bon pelanggan ini
+  const customerPayments = allPayments.filter(pay => bonIdsSet.has(pay.bon_id));
+
+  // Map total bayar per bon
+  const paymentByBonId = {};
+  for (const pay of customerPayments) {
+    paymentByBonId[pay.bon_id] = (paymentByBonId[pay.bon_id] || 0) + (Number(pay.jumlah) || 0);
+  }
+
+  // Hitung total ringkasan
+  let totalBon = 0;
+  let totalSudahBayar = 0;
+  let totalSisa = 0;
+
+  customerBons.forEach(b => {
+    const bayar = paymentByBonId[b.id] || 0;
+    const jumlah = Number(b.jumlah) || 0;
+    const sisa = Math.max(0, jumlah - bayar);
+
+    totalBon += jumlah;
+    totalSudahBayar += bayar;
+    totalSisa += sisa;
+
+    b.sudah_bayar = bayar;
+    b.sisa = sisa;
+  });
+
+  // Urutkan bon: terbaru di atas
+  customerBons.sort((a, b) => new Date(b.dibuat_pada) - new Date(a.dibuat_pada));
+
+  // Tampilkan data info pelanggan
+  document.getElementById('detail-bon-pelanggan-nama').textContent = pelanggan.nama;
+  const hpText = pelanggan.no_hp ? `HP: ${pelanggan.no_hp}` : 'HP: -';
+  const alamatText = pelanggan.alamat ? `Alamat: ${pelanggan.alamat}` : 'Alamat: -';
+  document.getElementById('detail-bon-pelanggan-kontak').textContent = `${hpText} • ${alamatText}`;
+
+  // Tampilkan 3 angka ringkasan
+  document.getElementById('detail-stat-total-bon').textContent = formatRp(totalBon);
+  document.getElementById('detail-stat-sudah-bayar').textContent = formatRp(totalSudahBayar);
+  document.getElementById('detail-stat-sisa-bon').textContent = formatRp(totalSisa);
+
+  // Konfigurasi tombol share WhatsApp
+  const btnWa = document.getElementById('btn-share-wa-bon');
+  btnWa.onclick = async () => {
+    const warungName = (await getPengaturan('nama_warung')) || 'WarungKas';
+    const waText = `Halo ${pelanggan.nama}, ringkasan bon di ${warungName}:\n` +
+                   `Total bon: ${formatRp(totalBon)}\n` +
+                   `Sudah dibayar: ${formatRp(totalSudahBayar)}\n` +
+                   `Sisa bon: ${formatRp(totalSisa)}.\n` +
+                   `Terima kasih.`;
+
+    const encoded = encodeURIComponent(waText);
+    const cleanPhone = normalizePhoneForWA(pelanggan.no_hp);
+
+    const waUrl = cleanPhone
+      ? `https://wa.me/${cleanPhone}?text=${encoded}`
+      : `https://wa.me/?text=${encoded}`;
+
+    window.open(waUrl, '_blank');
+  };
+
+  // Render daftar tagihan bon
+  await renderCustomerBonsList(customerBons, pelanggan);
+
+  // Render tabel riwayat pembayaran
+  await renderCustomerPaymentsList(customerPayments, customerBons);
+
+  showView('view-bon-detail');
+}
+
+async function renderCustomerBonsList(customerBons, pelanggan) {
+  const container = document.getElementById('detail-bon-list-container');
+  container.innerHTML = '';
+
+  if (customerBons.length === 0) {
+    container.innerHTML = '<div class="text-xs text-muted text-center" style="padding: 12px;">Tidak ada catatan bon.</div>';
+    return;
+  }
+
+  // Pre-load nomor transaksi untuk setiap bon
+  const trxMap = {};
+  for (const b of customerBons) {
+    if (b.transaksi_id) {
+      const trx = await getTransaksiById(b.transaksi_id);
+      trxMap[b.transaksi_id] = trx ? trx.nomor : '-';
+    }
+  }
+
+  const fragment = document.createDocumentFragment();
+
+  customerBons.forEach(b => {
+    const isLunas = b.sisa <= 0;
+    const trxNomor = trxMap[b.transaksi_id] || '-';
+    const d = new Date(b.dibuat_pada);
+    const dateStr = `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+
+    const card = document.createElement('div');
+    card.className = 'bon-bill-card';
+
+    card.innerHTML = `
+      <div class="bon-bill-header">
+        <div>
+          <span class="font-bold text-sm">${trxNomor}</span>
+          <span class="text-xs text-muted" style="display: block;">${dateStr}</span>
+        </div>
+        <span class="pay-badge ${isLunas ? 'pay-badge-paid' : 'pay-badge-unpaid'}">
+          ${isLunas ? 'Lunas' : 'Belum Lunas'}
+        </span>
+      </div>
+
+      <div class="bon-bill-body">
+        <div>
+          <span class="text-xs text-muted">Jumlah Bon</span>
+          <strong style="display: block;">${formatRp(b.jumlah)}</strong>
+        </div>
+        <div>
+          <span class="text-xs text-muted">Dibayar</span>
+          <strong class="text-success" style="display: block;">${formatRp(b.sudah_bayar)}</strong>
+        </div>
+        <div>
+          <span class="text-xs text-muted">Sisa Bon</span>
+          <strong class="text-amber" style="display: block;">${formatRp(b.sisa)}</strong>
+        </div>
+      </div>
+
+      ${!isLunas ? `
+        <button type="button" class="btn btn-primary btn-sm btn-block mt-1" data-bon-pay="${b.id}">
+          💵 Catat Pembayaran
+        </button>
+      ` : ''}
+    `;
+
+    const payBtn = card.querySelector(`[data-bon-pay="${b.id}"]`);
+    if (payBtn) {
+      payBtn.onclick = () => openPayBonModal(b, pelanggan, trxNomor);
+    }
+
+    fragment.appendChild(card);
+  });
+
+  container.appendChild(fragment);
+}
+
+async function renderCustomerPaymentsList(payments, customerBons) {
+  const tbody = document.getElementById('table-riwayat-bayar-bon');
+  tbody.innerHTML = '';
+
+  if (payments.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Belum ada riwayat pembayaran bon.</td></tr>';
+    return;
+  }
+
+  // Map bon_id -> nomor transaksi
+  const bonTrxMap = {};
+  for (const b of customerBons) {
+    if (b.transaksi_id) {
+      const trx = await getTransaksiById(b.transaksi_id);
+      bonTrxMap[b.id] = trx ? trx.nomor : '-';
+    }
+  }
+
+  // Urutkan pembayaran: terbaru di atas
+  const sortedPayments = [...payments].sort((a, b) => new Date(b.waktu) - new Date(a.waktu));
+
+  sortedPayments.forEach(p => {
+    const tr = document.createElement('tr');
+    const d = new Date(p.waktu);
+    const dateStr = `${d.getDate()}/${d.getMonth() + 1} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+    const trxNomor = bonTrxMap[p.bon_id] || '-';
+    const metodeLabel = (p.metode || 'tunai').toUpperCase();
+
+    tr.innerHTML = `
+      <td class="text-xs text-muted">${dateStr}</td>
+      <td class="font-bold text-xs">${trxNomor}</td>
+      <td class="text-xs">${metodeLabel}</td>
+      <td class="font-bold text-success">${formatRp(p.jumlah)}</td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+}
+
+// Buka Modal Pembayaran Bon
+function openPayBonModal(bon, pelanggan, trxNomor) {
+  activePayingBonId = bon.id;
+
+  document.getElementById('input-paybon-bon-id').value = bon.id;
+  document.getElementById('modal-paybon-nama-pelanggan').textContent = pelanggan.nama;
+  document.getElementById('modal-paybon-nomor-trx').textContent = trxNomor || '-';
+  document.getElementById('modal-paybon-total-awal').textContent = formatRp(bon.jumlah);
+  document.getElementById('modal-paybon-sudah-bayar').textContent = formatRp(bon.sudah_bayar);
+  document.getElementById('modal-paybon-sisa-bon').textContent = formatRp(bon.sisa);
+
+  const inputNominal = document.getElementById('input-paybon-nominal');
+  inputNominal.value = '';
+  inputNominal.max = bon.sisa;
+
+  // Default metode: tunai
+  document.querySelectorAll('input[name="paybon-metode"]').forEach(radio => {
+    radio.checked = (radio.value === 'tunai');
+  });
+
+  document.getElementById('paybon-error-msg').classList.add('hidden');
+
+  // Tombol bayar lunas
+  document.getElementById('btn-paybon-lunas').onclick = () => {
+    inputNominal.value = bon.sisa;
+    document.getElementById('paybon-error-msg').classList.add('hidden');
+  };
+
+  document.getElementById('modal-bayar-bon').classList.remove('hidden');
+  inputNominal.focus();
+}
+
+// Simpan Pembayaran Bon Atomik
+async function eksekusiSimpanPembayaranBon(e) {
+  e.preventDefault();
+
+  const bonId = document.getElementById('input-paybon-bon-id').value;
+  const nominalInput = Math.round(Number(document.getElementById('input-paybon-nominal').value) || 0);
+  const errorBox = document.getElementById('paybon-error-msg');
+  errorBox.classList.add('hidden');
+
+  if (!bonId) return;
+
+  const bon = await getBonById(bonId);
+  if (!bon) {
+    errorBox.textContent = 'Data bon tidak ditemukan!';
+    errorBox.classList.remove('hidden');
+    return;
+  }
+
+  // Hitung ulang sisa bon saat ini secara akurat
+  const allPayments = await getAllPembayaranBon();
+  const currentPayments = allPayments.filter(p => p.bon_id === bonId);
+  const totalSudahBayar = currentPayments.reduce((acc, p) => acc + (Number(p.jumlah) || 0), 0);
+  const sisaSaatIni = Math.max(0, (Number(bon.jumlah) || 0) - totalSudahBayar);
+
+  if (nominalInput <= 0) {
+    errorBox.textContent = 'Nominal pembayaran harus lebih dari Rp 0!';
+    errorBox.classList.remove('hidden');
+    return;
+  }
+
+  if (nominalInput > sisaSaatIni) {
+    errorBox.textContent = `Nominal melebihi sisa bon (${formatRp(sisaSaatIni)}). Tidak diperbolehkan kelebihan pada cicilan bon.`;
+    errorBox.classList.remove('hidden');
+    return;
+  }
+
+  const selectedMetode = document.querySelector('input[name="paybon-metode"]:checked')?.value || 'tunai';
+  const activeShift = await getActiveShift();
+  const shiftId = activeShift ? activeShift.id : null;
+  const nowIso = new Date().toISOString();
+  const sisaSetelahnya = sisaSaatIni - nominalInput;
+
+  const btnSubmit = document.getElementById('btn-submit-bayar-bon');
+  btnSubmit.disabled = true;
+  btnSubmit.textContent = 'Menyimpan...';
+
+  try {
+    const tx = dbInstance.transaction(
+      ['pembayaran_bon', 'bon', 'log_aktivitas'],
+      'readwrite'
+    );
+
+    const storePayBon = tx.objectStore('pembayaran_bon');
+    const storeBon = tx.objectStore('bon');
+    const storeLog = tx.objectStore('log_aktivitas');
+
+    // 1. Tambah record pembayaran_bon
+    const paymentRecord = {
+      id: generateUUID(),
+      bon_id: bonId,
+      jumlah: nominalInput,
+      metode: selectedMetode,
+      shift_id: shiftId,
+      pengguna_id: currentUser ? currentUser.id : 'sistem',
+      waktu: nowIso
+    };
+    storePayBon.add(paymentRecord);
+
+    // 2. Perbarui status bon jika sisa menjadi 0
+    if (sisaSetelahnya === 0) {
+      bon.status = 'lunas';
+      storeBon.put(bon);
+    }
+
+    // 3. Catat log aktivitas
+    storeLog.add({
+      id: generateUUID(),
+      pengguna_id: currentUser ? currentUser.id : 'sistem',
+      waktu: nowIso,
+      aksi: 'PEMBAYARAN_BON',
+      objek: 'bon',
+      detail: JSON.stringify({
+        bon_id: bonId,
+        pelanggan_id: bon.pelanggan_id,
+        transaksi_id: bon.transaksi_id,
+        jumlah_bayar: nominalInput,
+        metode: selectedMetode,
+        sisa_akhir: sisaSetelahnya,
+        status_akhir: sisaSetelahnya === 0 ? 'lunas' : 'belum_lunas'
+      })
+    });
+
+    tx.oncomplete = async () => {
+      document.getElementById('modal-bayar-bon').classList.add('hidden');
+      btnSubmit.disabled = false;
+      btnSubmit.textContent = 'Simpan Pembayaran';
+
+      alert(`Pembayaran bon ${formatRp(nominalInput)} (${selectedMetode.toUpperCase()}) berhasil dicatat.`);
+
+      // Segarkan layar detail pelanggan
+      if (activeBonCustomerId) {
+        await openBonCustomerDetail(activeBonCustomerId);
+      }
+    };
+
+    tx.onerror = (e) => {
+      console.error('Gagal menyimpan pembayaran bon:', e.target.error);
+      alert('Gagal mencatat pembayaran bon. Coba lagi.');
+      btnSubmit.disabled = false;
+      btnSubmit.textContent = 'Simpan Pembayaran';
+    };
+
+  } catch (err) {
+    console.error('Error pembayaran bon:', err);
+    alert('Terjadi kesalahan sistem saat menyimpan pembayaran bon.');
+    btnSubmit.disabled = false;
+    btnSubmit.textContent = 'Simpan Pembayaran';
+  }
+}
+
+// --- 13. EVENT LISTENERS ---
 function setupEventListeners() {
   // Setup Awal Form
   document.getElementById('form-setup').addEventListener('submit', async (e) => {
@@ -2807,6 +3375,27 @@ function setupEventListeners() {
     document.getElementById('modal-buka-shift').classList.add('hidden');
     renderDashboard();
   });
+
+
+  // --- TAHAP 4: EVENT LISTENERS BUKU BON ---
+  document.getElementById('menu-bon').addEventListener('click', renderBukuBonScreen);
+  document.getElementById('btn-bon-back').addEventListener('click', renderDashboard);
+
+  document.getElementById('input-cari-pelanggan-bon').addEventListener('input', (e) => {
+    currentBonSearch = e.target.value;
+    filterAndRenderBonCustomers();
+  });
+
+  document.getElementById('btn-back-detail-bon').addEventListener('click', async () => {
+    // Kembali dari detail ke daftar: hitung ulang dari database
+    await renderBukuBonScreen();
+  });
+
+  document.getElementById('btn-close-modal-paybon').addEventListener('click', () => {
+    document.getElementById('modal-bayar-bon').classList.add('hidden');
+  });
+
+  document.getElementById('form-catat-bayar-bon').addEventListener('submit', eksekusiSimpanPembayaranBon);
 
   // Navigasi ke Produk & Stok
   document.getElementById('menu-produk').addEventListener('click', () => {

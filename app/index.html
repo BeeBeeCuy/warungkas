@@ -112,24 +112,25 @@
         </div>
 
         <div class="menu-grid">
-          <!-- TAHAP 3: MENU KASIR DIAKTIFKAN -->
+          <!-- MENU KASIR -->
           <div class="menu-card" id="menu-kasir">
             <div class="menu-icon">🛒</div>
             <div class="menu-label">Kasir POS</div>
             <span class="badge-stage badge-active">Tersedia</span>
           </div>
 
-          <!-- TAHAP 2: MENU PRODUK & STOK DIAKTIFKAN -->
+          <!-- MENU PRODUK & STOK -->
           <div class="menu-card" id="menu-produk">
             <div class="menu-icon">📦</div>
             <div class="menu-label">Produk & Stok</div>
             <span class="badge-stage badge-active">Tersedia</span>
           </div>
 
-          <div class="menu-card menu-card-disabled">
+          <!-- TAHAP 4: MENU BUKU BON DIAKTIFKAN -->
+          <div class="menu-card" id="menu-bon">
             <div class="menu-icon">📖</div>
             <div class="menu-label">Buku Bon</div>
-            <span class="badge-stage">Tahap 4</span>
+            <span class="badge-stage badge-active">Tersedia</span>
           </div>
 
           <div class="menu-card menu-card-disabled">
@@ -153,7 +154,7 @@
       </main>
     </section>
 
-    <!-- LAYAR KASIR POS (TAHAP 3) -->
+    <!-- LAYAR KASIR POS -->
     <section id="view-kasir" class="view hidden">
       <header class="top-nav">
         <button type="button" id="btn-kasir-back" class="btn btn-secondary btn-sm">← Beranda</button>
@@ -185,7 +186,6 @@
         <div id="kasir-product-grid" class="pos-product-grid"></div>
       </main>
 
-      <!-- BAR KERANJANG BAWAH (RINGKASAN CEPAT ≤10 DETIK) -->
       <footer id="kasir-bottom-bar" class="pos-bottom-bar">
         <div class="bottom-bar-left">
           <span class="text-xs text-muted">Total Belanja (<span id="bottom-bar-items">0 item</span>)</span>
@@ -215,7 +215,7 @@
       </div>
     </div>
 
-    <!-- MODAL: PILIH SATUAN & JUMLAH (POPUP SAAT KETUK PRODUK DI KASIR) -->
+    <!-- MODAL: PILIH SATUAN & JUMLAH -->
     <div id="modal-picker" class="modal-overlay hidden">
       <div class="modal-card">
         <h3 id="picker-prod-nama" class="card-title mb-1">Nama Produk</h3>
@@ -251,7 +251,7 @@
       </div>
     </div>
 
-    <!-- MODAL: PEMBAYARAN & INVARIAN KETAT -->
+    <!-- MODAL: PEMBAYARAN KASIR -->
     <div id="modal-payment" class="modal-overlay hidden">
       <div class="modal-card modal-payment-card">
         <div class="flex-between mb-2">
@@ -407,7 +407,166 @@
       </div>
     </div>
 
-    <!-- LAYAR PRODUK & STOK (KATALOG & PENCARIAN) -->
+    <!-- TAHAP 4: LAYAR DAFTAR PELANGGAN BUKU BON -->
+    <section id="view-bon" class="view hidden">
+      <header class="top-nav">
+        <button type="button" id="btn-bon-back" class="btn btn-secondary btn-sm">← Beranda</button>
+        <div class="nav-title">Buku Bon</div>
+        <div style="width: 60px;"></div>
+      </header>
+
+      <main class="content-body">
+        <!-- RINGKASAN TOTAL BON WARUNG -->
+        <div class="card mb-3 summary-bon-card">
+          <div class="flex-between">
+            <div>
+              <div class="text-xs text-muted">Total Seluruh Bon Belum Lunas</div>
+              <div id="label-total-semua-bon" class="bon-summary-amount">Rp 0</div>
+            </div>
+            <div class="text-right">
+              <span id="badge-pelanggan-berutang-count" class="badge-warning text-xs">0 Pelanggan</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="search-box mb-3">
+          <input type="text" id="input-cari-pelanggan-bon" class="form-input" placeholder="Cari nama pelanggan..." autocomplete="off">
+        </div>
+
+        <div class="list-meta mb-2 flex-between">
+          <span id="label-total-pelanggan-bon" class="text-xs text-muted">Memuat...</span>
+        </div>
+
+        <div id="list-pelanggan-bon-container" class="bon-customer-list"></div>
+      </main>
+    </section>
+
+    <!-- TAHAP 4: LAYAR DETAIL PELANGGAN BON -->
+    <section id="view-bon-detail" class="view hidden">
+      <header class="top-nav">
+        <button type="button" id="btn-back-detail-bon" class="btn btn-secondary btn-sm">← Buku Bon</button>
+        <div class="nav-title">Detail Bon Pelanggan</div>
+        <div style="width: 60px;"></div>
+      </header>
+
+      <main class="content-body">
+        <!-- KARTU INFORMASI PELANGGAN & RINGKASAN 3 ANGKA -->
+        <div class="card mb-3">
+          <h2 id="detail-bon-pelanggan-nama" class="font-bold mb-1">Nama Pelanggan</h2>
+          <div id="detail-bon-pelanggan-kontak" class="text-xs text-muted mb-3">HP: - • Alamat: -</div>
+
+          <div class="bon-stats-grid mb-3">
+            <div class="bon-stat-item">
+              <span class="text-xs text-muted">Total Bon</span>
+              <strong id="detail-stat-total-bon" class="font-bold">Rp 0</strong>
+            </div>
+            <div class="bon-stat-item">
+              <span class="text-xs text-muted">Sudah Dibayar</span>
+              <strong id="detail-stat-sudah-bayar" class="font-bold text-success">Rp 0</strong>
+            </div>
+            <div class="bon-stat-item">
+              <span class="text-xs text-muted">Sisa Bon</span>
+              <strong id="detail-stat-sisa-bon" class="font-bold text-amber">Rp 0</strong>
+            </div>
+          </div>
+
+          <button type="button" id="btn-share-wa-bon" class="btn btn-secondary btn-block btn-sm">
+            📲 Bagikan Ringkasan via WhatsApp
+          </button>
+        </div>
+
+        <!-- DAFTAR BON MILIK PELANGGAN -->
+        <div class="card mb-3">
+          <h3 class="card-title mb-2">Daftar Tagihan Bon</h3>
+          <div id="detail-bon-list-container" class="bon-bills-list"></div>
+        </div>
+
+        <!-- RIWAYAT PEMBAYARAN CICILAN PELANGGAN INI -->
+        <div class="card mb-3">
+          <h3 class="card-title mb-2">Riwayat Pembayaran / Cicilan</h3>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Waktu</th>
+                  <th>Transaksi</th>
+                  <th>Metode</th>
+                  <th>Nominal</th>
+                </tr>
+              </thead>
+              <tbody id="table-riwayat-bayar-bon"></tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+    </section>
+
+    <!-- TAHAP 4: MODAL CATAT PEMBAYARAN BON -->
+    <div id="modal-bayar-bon" class="modal-overlay hidden">
+      <div class="modal-card">
+        <h3 class="card-title mb-1">Catat Pembayaran Bon</h3>
+        <p class="text-xs text-muted mb-3">Penerimaan cicilan atau pelunasan bon pelanggan.</p>
+
+        <div class="card mb-3" style="background-color: var(--bg-input);">
+          <div class="flex-between mb-1">
+            <span class="text-xs text-muted">Pelanggan:</span>
+            <span id="modal-paybon-nama-pelanggan" class="font-bold text-sm">-</span>
+          </div>
+          <div class="flex-between mb-1">
+            <span class="text-xs text-muted">No. Transaksi:</span>
+            <span id="modal-paybon-nomor-trx" class="font-bold text-xs">-</span>
+          </div>
+          <div class="flex-between mb-1">
+            <span class="text-xs text-muted">Total Tagihan Awal:</span>
+            <span id="modal-paybon-total-awal" class="text-xs">-</span>
+          </div>
+          <div class="flex-between mb-1">
+            <span class="text-xs text-muted">Sudah Dibayar:</span>
+            <span id="modal-paybon-sudah-bayar" class="text-xs text-success">-</span>
+          </div>
+          <div class="flex-between pt-1" style="border-top: 1px solid var(--border-color);">
+            <span class="font-bold text-xs">Sisa Bon Saat Ini:</span>
+            <span id="modal-paybon-sisa-bon" class="font-bold text-amber">Rp 0</span>
+          </div>
+        </div>
+
+        <form id="form-catat-bayar-bon" class="form-vertical" autocomplete="off">
+          <input type="hidden" id="input-paybon-bon-id">
+
+          <div class="form-group">
+            <div class="flex-between">
+              <label for="input-paybon-nominal">Nominal Pembayaran (Rp) *</label>
+              <button type="button" id="btn-paybon-lunas" class="btn-link-action text-xs text-amber font-bold">Bayar Lunas</button>
+            </div>
+            <input type="number" id="input-paybon-nominal" class="form-input" min="1" step="1" placeholder="Masukkan jumlah bayar" required>
+            <small class="form-hint">Tidak boleh melebihi sisa bon saat ini.</small>
+          </div>
+
+          <div class="form-group mb-2">
+            <label>Metode Pembayaran *</label>
+            <div class="paybon-method-selector">
+              <label class="paybon-method-opt">
+                <input type="radio" name="paybon-metode" value="tunai" checked>
+                <span>💵 Tunai</span>
+              </label>
+              <label class="paybon-method-opt">
+                <input type="radio" name="paybon-metode" value="qris">
+                <span>📱 QRIS</span>
+              </label>
+            </div>
+          </div>
+
+          <div id="paybon-error-msg" class="alert-error text-xs hidden"></div>
+
+          <div class="modal-actions mt-2">
+            <button type="button" id="btn-close-modal-paybon" class="btn btn-secondary flex-1">Batal</button>
+            <button type="submit" id="btn-submit-bayar-bon" class="btn btn-primary flex-1">Simpan Pembayaran</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- LAYAR PRODUK & STOK -->
     <section id="view-produk" class="view hidden">
       <header class="top-nav">
         <button type="button" id="btn-produk-back" class="btn btn-secondary btn-sm">← Beranda</button>
@@ -529,7 +688,6 @@
       </header>
 
       <main class="content-body">
-        <!-- KARTU INFO UTAMA -->
         <div class="card mb-3">
           <div class="flex-between mb-1">
             <span id="detail-prod-kategori" class="badge-cat">Kategori</span>
@@ -557,7 +715,6 @@
           </div>
         </div>
 
-        <!-- KARTU STATUS SALDO & MUTASI -->
         <div class="card mb-3">
           <div class="text-xs text-muted mb-1">Saldo Stok Fisik Saat Ini</div>
           <div class="stock-hero">
@@ -566,7 +723,6 @@
           </div>
           <div id="detail-prod-konversi-teks" class="text-sm text-muted mb-3"></div>
 
-          <!-- AKSI MUTASI STOK (HANYA PEMILIK) -->
           <div class="action-btn-row role-pemilik-only">
             <button type="button" id="btn-open-kulakan" class="btn btn-secondary btn-sm flex-1">📥 Kulakan</button>
             <button type="button" id="btn-open-rusak" class="btn btn-secondary btn-sm flex-1 text-danger">⚠️ Rusak</button>
@@ -574,7 +730,6 @@
           </div>
         </div>
 
-        <!-- KARTU SATUAN JUAL (STORE: satuan_produk) -->
         <div class="card mb-3">
           <div class="flex-between mb-2">
             <h3 class="card-title mb-0">Satuan Jual Lainnya</h3>
@@ -584,7 +739,6 @@
           <div id="list-satuan-turunan" class="unit-list"></div>
         </div>
 
-        <!-- KARTU RIWAYAT PERGERAKAN STOK -->
         <div class="card mb-3">
           <h3 class="card-title mb-2">Riwayat Buku Stok (Ledger)</h3>
           <div class="table-responsive">
@@ -632,7 +786,7 @@
       </div>
     </div>
 
-    <!-- MODAL: MUTASI STOK (KULAKAN / RUSAK / KOREKSI) -->
+    <!-- MODAL: MUTASI STOK -->
     <div id="modal-mutasi" class="modal-overlay hidden">
       <div class="modal-card">
         <h3 class="card-title mb-2" id="modal-mutasi-title">Mutasi Stok</h3>
@@ -646,7 +800,6 @@
             <input type="number" id="input-mutasi-jumlah" class="form-input" min="1" step="1" required>
           </div>
 
-          <!-- Opsi khusus Koreksi (+ atau -) -->
           <div class="form-group hidden" id="group-koreksi-arah">
             <label for="select-koreksi-arah">Arah Koreksi *</label>
             <select id="select-koreksi-arah" class="form-input">

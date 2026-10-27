@@ -962,3 +962,156 @@ label {
   justify-content: center;
   margin: 0 auto 12px;
 }
+
+/* --- TAHAP 4: BUKU BON DIGITAL --- */
+.text-right {
+  text-align: right;
+}
+
+.btn-link-action {
+  background: none;
+  border: none;
+  color: var(--primary);
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.summary-bon-card {
+  background: linear-gradient(135deg, #1e293b 0%, #172033 100%);
+  border: 1px solid var(--border-color);
+}
+
+.bon-summary-amount {
+  font-size: 1.55rem;
+  font-weight: 800;
+  color: var(--primary);
+  margin-top: 4px;
+}
+
+.bon-customer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bon-customer-item {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.bon-customer-item:active {
+  background-color: #243247;
+}
+
+.bon-cust-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.bon-cust-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.bon-cust-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.bon-cust-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.bon-cust-sisa {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.bon-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  text-align: center;
+}
+
+.bon-stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bon-bills-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bon-bill-card {
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bon-bill-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.bon-bill-body {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  font-size: 0.8rem;
+  background-color: rgba(15, 23, 42, 0.4);
+  padding: 8px;
+  border-radius: 6px;
+}
+
+.paybon-method-selector {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.paybon-method-opt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.paybon-method-opt input[type="radio"] {
+  accent-color: var(--primary);
+  width: 18px;
+  height: 18px;
+}

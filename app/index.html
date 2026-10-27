@@ -76,7 +76,6 @@
         </div>
         <div id="login-error-msg" class="alert-error hidden"></div>
 
-        <!-- KEYPAD ANGKA BESAR (MINIMAL 48PX) -->
         <div class="keypad" id="login-keypad">
           <button type="button" class="btn-key" data-key="1">1</button>
           <button type="button" class="btn-key" data-key="2">2</button>
@@ -109,10 +108,9 @@
       <main class="content-body">
         <div class="welcome-banner">
           <h2 id="dash-greeting">Selamat Bekerja</h2>
-          <p class="text-muted">Gunakan menu di bawah ini untuk memulai transaksi kasir.</p>
+          <p class="text-muted">Pilih menu di bawah untuk operasional warung.</p>
         </div>
 
-        <!-- KISI MENU UTAMA -->
         <div class="menu-grid">
           <div class="menu-card menu-card-disabled">
             <div class="menu-icon">🛒</div>
@@ -120,10 +118,11 @@
             <span class="badge-stage">Tahap 3</span>
           </div>
 
-          <div class="menu-card menu-card-disabled">
+          <!-- TAHAP 2: MENU PRODUK & STOK DIAKTIFKAN -->
+          <div class="menu-card" id="menu-produk">
             <div class="menu-icon">📦</div>
             <div class="menu-label">Produk & Stok</div>
-            <span class="badge-stage">Tahap 2</span>
+            <span class="badge-stage badge-active">Tersedia</span>
           </div>
 
           <div class="menu-card menu-card-disabled">
@@ -152,6 +151,267 @@
         </div>
       </main>
     </section>
+
+    <!-- LAYAR PRODUK & STOK (KATALOG & PENCARIAN) -->
+    <section id="view-produk" class="view hidden">
+      <header class="top-nav">
+        <button type="button" id="btn-produk-back" class="btn btn-secondary btn-sm">← Beranda</button>
+        <div class="nav-title">Produk & Stok</div>
+        <button type="button" id="btn-produk-tambah" class="btn btn-primary btn-sm role-pemilik-only">+ Tambah</button>
+      </header>
+
+      <main class="content-body">
+        <div id="box-muat-contoh" class="card mb-3 hidden role-pemilik-only">
+          <div class="flex-between">
+            <div>
+              <div class="font-bold">Mulai dengan Cepat</div>
+              <div class="text-muted text-xs">Muat 50 produk contoh khas warung Madura.</div>
+            </div>
+            <button type="button" id="btn-muat-contoh" class="btn btn-secondary btn-sm">Muat 50 Produk Contoh</button>
+          </div>
+        </div>
+
+        <div class="search-box mb-3">
+          <input type="text" id="input-cari-produk" class="form-input" placeholder="Ketik nama produk..." autocomplete="off">
+        </div>
+
+        <div class="category-chips mb-3" id="chips-kategori">
+          <button type="button" class="chip active" data-kat="SEMUA">Semua</button>
+          <button type="button" class="chip" data-kat="Sembako">Sembako</button>
+          <button type="button" class="chip" data-kat="Rokok">Rokok</button>
+          <button type="button" class="chip" data-kat="Minuman">Minuman</button>
+          <button type="button" class="chip" data-kat="Makanan & Camilan">Makanan</button>
+          <button type="button" class="chip" data-kat="Kebutuhan Rumah">Rumah</button>
+          <button type="button" class="chip" data-kat="Pulsa & Token">Pulsa</button>
+          <button type="button" class="chip" data-kat="Lainnya">Lainnya</button>
+        </div>
+
+        <div class="list-meta mb-2 flex-between">
+          <span id="label-total-produk" class="text-xs text-muted">Memuat...</span>
+          <span id="label-menipis-count" class="badge-warning text-xs hidden">0 Stok Menipis</span>
+        </div>
+
+        <div id="list-produk-container" class="product-list"></div>
+      </main>
+    </section>
+
+    <!-- LAYAR TAMBAH / EDIT PRODUK -->
+    <section id="view-produk-form" class="view hidden">
+      <header class="top-nav">
+        <button type="button" id="btn-cancel-produk-form" class="btn btn-secondary btn-sm">Batal</button>
+        <div class="nav-title" id="title-produk-form">Tambah Produk</div>
+        <div style="width: 50px;"></div>
+      </header>
+
+      <main class="content-body">
+        <form id="form-produk" class="form-vertical" autocomplete="off">
+          <input type="hidden" id="form-prod-id">
+
+          <div class="form-group">
+            <label for="form-prod-nama">Nama Produk *</label>
+            <input type="text" id="form-prod-nama" class="form-input" placeholder="Contoh: Djarum Super 12" required>
+          </div>
+
+          <div class="form-group">
+            <label for="form-prod-kategori">Kategori *</label>
+            <select id="form-prod-kategori" class="form-input" required>
+              <option value="Sembako">Sembako</option>
+              <option value="Rokok">Rokok</option>
+              <option value="Minuman">Minuman</option>
+              <option value="Makanan & Camilan">Makanan & Camilan</option>
+              <option value="Kebutuhan Rumah">Kebutuhan Rumah</option>
+              <option value="Pulsa & Token">Pulsa & Token</option>
+              <option value="Lainnya">Lainnya</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="form-prod-satuan-dasar">Satuan Dasar *</label>
+            <input type="text" id="form-prod-satuan-dasar" class="form-input" placeholder="Contoh: batang / butir / sachet / pcs / kg" required>
+            <small class="form-hint">Satuan terkecil yang disimpan dalam stok.</small>
+          </div>
+
+          <div class="grid-2-col">
+            <div class="form-group">
+              <label for="form-prod-modal">Harga Modal / Satuan Dasar (Rp) *</label>
+              <input type="number" id="form-prod-modal" class="form-input" min="0" step="1" placeholder="0" required>
+            </div>
+            <div class="form-group">
+              <label for="form-prod-jual">Harga Jual / Satuan Dasar (Rp) *</label>
+              <input type="number" id="form-prod-jual" class="form-input" min="0" step="1" placeholder="0" required>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="form-prod-stok-min">Batas Stok Minimum *</label>
+            <input type="number" id="form-prod-stok-min" class="form-input" min="0" step="1" value="5" required>
+            <small class="form-hint">Muncul peringatan jika saldo di bawah nilai ini.</small>
+          </div>
+
+          <div class="form-checkbox">
+            <input type="checkbox" id="form-prod-favorit">
+            <label for="form-prod-favorit">Tandai sebagai Produk Favorit (Sering Dicari)</label>
+          </div>
+
+          <div id="box-stok-awal-form" class="form-group">
+            <label for="form-prod-stok-awal">Stok Awal Kulakan (Opsional)</label>
+            <input type="number" id="form-prod-stok-awal" class="form-input" min="0" step="1" value="0">
+            <small class="form-hint">Akan dicatat otomatis sebagai MASUK_KULAKAN.</small>
+          </div>
+
+          <button type="submit" id="btn-save-produk" class="btn btn-primary btn-block mt-2">Simpan Produk</button>
+          <button type="button" id="btn-nonaktifkan-produk" class="btn btn-secondary btn-block text-danger hidden role-pemilik-only">Nonaktifkan Produk Ini</button>
+        </form>
+      </main>
+    </section>
+
+    <!-- LAYAR DETAIL PRODUK -->
+    <section id="view-produk-detail" class="view hidden">
+      <header class="top-nav">
+        <button type="button" id="btn-back-detail-produk" class="btn btn-secondary btn-sm">← Daftar</button>
+        <div class="nav-title">Detail Produk</div>
+        <button type="button" id="btn-edit-produk-current" class="btn btn-secondary btn-sm role-pemilik-only">Ubah</button>
+      </header>
+
+      <main class="content-body">
+        <!-- KARTU INFO UTAMA -->
+        <div class="card mb-3">
+          <div class="flex-between mb-1">
+            <span id="detail-prod-kategori" class="badge-cat">Kategori</span>
+            <span id="detail-prod-fav" class="text-amber hidden">★ Favorit</span>
+          </div>
+          <h2 id="detail-prod-nama" class="font-bold mb-2">Nama Produk</h2>
+
+          <div class="detail-grid">
+            <div>
+              <div class="text-xs text-muted">Satuan Dasar</div>
+              <div id="detail-prod-satuan-dasar" class="font-bold">-</div>
+            </div>
+            <div>
+              <div class="text-xs text-muted">Stok Minimum</div>
+              <div id="detail-prod-stok-min" class="font-bold">-</div>
+            </div>
+            <div>
+              <div class="text-xs text-muted">Harga Modal (Dasar)</div>
+              <div id="detail-prod-modal" class="font-bold">-</div>
+            </div>
+            <div>
+              <div class="text-xs text-muted">Harga Jual (Dasar)</div>
+              <div id="detail-prod-jual" class="font-bold text-amber">-</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- KARTU STATUS SALDO & MUTASI -->
+        <div class="card mb-3">
+          <div class="text-xs text-muted mb-1">Saldo Stok Fisik Saat Ini</div>
+          <div class="stock-hero">
+            <div id="detail-prod-saldo-angka" class="stock-number">0</div>
+            <div id="detail-prod-saldo-satuan" class="stock-unit">-</div>
+          </div>
+          <div id="detail-prod-konversi-teks" class="text-sm text-muted mb-3"></div>
+
+          <!-- AKSI MUTASI STOK (HANYA PEMILIK) -->
+          <div class="action-btn-row role-pemilik-only">
+            <button type="button" id="btn-open-kulakan" class="btn btn-secondary btn-sm flex-1">📥 Kulakan</button>
+            <button type="button" id="btn-open-rusak" class="btn btn-secondary btn-sm flex-1 text-danger">⚠️ Rusak</button>
+            <button type="button" id="btn-open-koreksi" class="btn btn-secondary btn-sm flex-1">⚙️ Koreksi</button>
+          </div>
+        </div>
+
+        <!-- KARTU SATUAN JUAL (STORE: satuan_produk) -->
+        <div class="card mb-3">
+          <div class="flex-between mb-2">
+            <h3 class="card-title mb-0">Satuan Jual Lainnya</h3>
+            <button type="button" id="btn-open-tambah-satuan" class="btn btn-primary btn-sm role-pemilik-only">+ Satuan</button>
+          </div>
+          <p class="text-xs text-muted mb-2">Satuan turunan yang dikonversi ke satuan dasar saat kasir menjual.</p>
+          <div id="list-satuan-turunan" class="unit-list"></div>
+        </div>
+
+        <!-- KARTU RIWAYAT PERGERAKAN STOK -->
+        <div class="card mb-3">
+          <h3 class="card-title mb-2">Riwayat Buku Stok (Ledger)</h3>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Waktu</th>
+                  <th>Jenis</th>
+                  <th>Jml</th>
+                  <th>Saldo</th>
+                  <th>Ket</th>
+                </tr>
+              </thead>
+              <tbody id="table-ledger-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+    </section>
+
+    <!-- MODAL: TAMBAH / EDIT SATUAN JUAL TURUNAN -->
+    <div id="modal-satuan" class="modal-overlay hidden">
+      <div class="modal-card">
+        <h3 class="card-title mb-3" id="modal-satuan-title">Tambah Satuan Jual</h3>
+        <form id="form-satuan-jual" class="form-vertical" autocomplete="off">
+          <input type="hidden" id="modal-satuan-id">
+          <div class="form-group">
+            <label for="input-satuan-nama">Nama Satuan Turunan *</label>
+            <input type="text" id="input-satuan-nama" class="form-input" placeholder="Contoh: bungkus / pak / renteng / kg" required>
+          </div>
+          <div class="form-group">
+            <label for="input-satuan-faktor">Faktor Konversi ke Satuan Dasar *</label>
+            <input type="number" id="input-satuan-faktor" class="form-input" min="1" step="1" placeholder="Contoh: 12 (artinya 1 bungkus = 12 batang)" required>
+            <small id="hint-satuan-konversi" class="form-hint">1 [Satuan] = X [Satuan Dasar]</small>
+          </div>
+          <div class="form-group">
+            <label for="input-satuan-harga">Harga Jual Satuan Ini (Rp) *</label>
+            <input type="number" id="input-satuan-harga" class="form-input" min="0" step="1" placeholder="25000" required>
+          </div>
+          <div class="modal-actions mt-2">
+            <button type="button" id="btn-close-modal-satuan" class="btn btn-secondary flex-1">Batal</button>
+            <button type="submit" class="btn btn-primary flex-1">Simpan Satuan</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL: MUTASI STOK (KULAKAN / RUSAK / KOREKSI) -->
+    <div id="modal-mutasi" class="modal-overlay hidden">
+      <div class="modal-card">
+        <h3 class="card-title mb-2" id="modal-mutasi-title">Mutasi Stok</h3>
+        <p class="text-xs text-muted mb-3" id="modal-mutasi-sub">Catat perubahan saldo stok fisik.</p>
+
+        <form id="form-mutasi-stok" class="form-vertical" autocomplete="off">
+          <input type="hidden" id="modal-mutasi-jenis">
+
+          <div class="form-group" id="group-mutasi-jumlah">
+            <label for="input-mutasi-jumlah" id="label-mutasi-jumlah">Jumlah (Satuan Dasar) *</label>
+            <input type="number" id="input-mutasi-jumlah" class="form-input" min="1" step="1" required>
+          </div>
+
+          <!-- Opsi khusus Koreksi (+ atau -) -->
+          <div class="form-group hidden" id="group-koreksi-arah">
+            <label for="select-koreksi-arah">Arah Koreksi *</label>
+            <select id="select-koreksi-arah" class="form-input">
+              <option value="TAMBAH">Tambah Saldo Fisik (+)</option>
+              <option value="KURANG">Kurangi Saldo Fisik (-)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="input-mutasi-ket" id="label-mutasi-ket">Keterangan / Alasan *</label>
+            <input type="text" id="input-mutasi-ket" class="form-input" placeholder="Contoh: Belanja kulakan di pasar / Bungkus sobek / Hasil opname fisik" required>
+          </div>
+
+          <div class="modal-actions mt-2">
+            <button type="button" id="btn-close-modal-mutasi" class="btn btn-secondary flex-1">Batal</button>
+            <button type="submit" class="btn btn-primary flex-1">Simpan Catatan</button>
+          </div>
+        </form>
+      </div>
+    </div>
 
     <!-- LAYAR PENGATURAN (KHUSUS PEMILIK) -->
     <section id="view-pengaturan" class="view hidden">

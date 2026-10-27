@@ -1,9 +1,10 @@
 /**
  * WarungKas - Service Worker Cache-First
  * Menjamin aplikasi bekerja penuh tanpa internet (offline-first)
+ * Versi Cache: warungkas-v2
  */
 
-const CACHE_NAME = 'warungkas-v1';
+const CACHE_NAME = 'warungkas-v2';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -37,7 +38,6 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Hanya tangani request method GET
   if (event.request.method !== 'GET') return;
 
   event.respondWith(
@@ -55,7 +55,6 @@ self.addEventListener('fetch', (event) => {
         });
         return networkResponse;
       }).catch(() => {
-        // Fallback offline bila membuka navigasi utama
         if (event.request.mode === 'navigate') {
           return caches.match('./index.html');
         }

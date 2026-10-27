@@ -3101,6 +3101,7 @@ function setupEventListeners() {
     });
 
     currentUser = pemilikUser;
+    localStorage.setItem('wk_session_user_id', pemilikUser.id);
     renderDashboard();
   });
 
@@ -3157,6 +3158,8 @@ function setupEventListeners() {
     if (isMatch) {
       resetFailedAttempts();
       currentUser = user;
+      // Simpan sesi login agar refresh/buka ulang aplikasi tidak perlu login lagi
+      localStorage.setItem('wk_session_user_id', user.id);
       currentEnteredPin = '';
       updatePinDots();
       await catatLog(user.id, 'LOGIN_BERHASIL', 'kasir', { peran: user.peran });
@@ -3186,6 +3189,8 @@ function setupEventListeners() {
     currentUser = null;
     currentShift = null;
     currentEnteredPin = '';
+    // Hapus sesi tersimpan: setelah Keluar, login PIN wajib lagi
+    localStorage.removeItem('wk_session_user_id');
     renderLoginScreen();
   });
 
@@ -3698,7 +3703,16 @@ async function initApp() {
     if (!isSetupDone || users.length === 0) {
       renderSetupScreen();
     } else {
-      renderLoginScreen();
+      // Pulihkan sesi login tersimpan (refresh tidak perlu login ulang)
+      const sessionUserId = localStorage.getItem('wk_session_user_id');
+      const sessionUser = sessionUserId ? users.find(u => u.id === sessionUserId && u.status_aktif !== false) : null;
+      if (sessionUser) {
+        currentUser = sessionUser;
+        renderDashboard();
+      } else {
+        if (sessionUserId) localStorage.removeItem('wk_session_user_id');
+        renderLoginScreen();
+      }
     }
   } catch (err) {
     console.error('Inisialisasi aplikasi gagal:', err);

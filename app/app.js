@@ -700,6 +700,10 @@ let cachedBonCustomers = [];
 let currentBonSearch = '';
 let activeBonCustomerId = null;
 let activePayingBonId = null;
+// State Shift & Laporan (Tahap 5)
+let activeShiftCalculation = null;
+let activeDetailShiftId = null;
+
 
 // --- 2. HELPER UTILITAS UMUM ---
 function generateUUID() {
@@ -748,6 +752,22 @@ function getJakartaDateKey() {
   return `${y}${m}${day}`;
 }
 
+
+
+// Tanggal zona Asia/Jakarta format YYYY-MM-DD untuk tanggal tertentu (Tahap 5)
+function getJakartaISODateString(dateObj = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(dateObj);
+
+  const y = parts.find(p => p.type === 'year').value;
+  const m = parts.find(p => p.type === 'month').value;
+  const day = parts.find(p => p.type === 'day').value;
+  return `${y}-${m}-${day}`;
+}
 
 // Normalisasi no hp ke format 62xxx
 function normalizePhoneForWA(phone) {
@@ -1204,6 +1224,89 @@ async function generateNextNomorTransaksi() {
   return `${prefix}${nextSeq}`;
 }
 
+
+// --- HELPER SHIFT, TRANSAKSI & LAPORAN (TAHAP 5) ---
+function getAllShifts() {
+  return new Promise((resolve, reject) => {
+    const tx = dbInstance.transaction(['shift'], 'readonly');
+    const store = tx.objectStore('shift');
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function getShiftById(shiftId) {
+  return new Promise((resolve, reject) => {
+    const tx = dbInstance.transaction(['shift'], 'readonly');
+    const store = tx.objectStore('shift');
+    const req = store.get(shiftId);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function getAllTransaksi() {
+  return new Promise((resolve, reject) => {
+    const tx = dbInstance.transaction(['transaksi'], 'readonly');
+    const store = tx.objectStore('transaksi');
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function getAllTransaksiItems() {
+  return new Promise((resolve, reject) => {
+    const tx = dbInstance.transaction(['transaksi_item'], 'readonly');
+    const store = tx.objectStore('transaksi_item');
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function getAllPembayaranTransaksi() {
+  return new Promise((resolve, reject) => {
+    const tx = dbInstance.transaction(['pembayaran_transaksi'], 'readonly');
+    const store = tx.objectStore('pembayaran_transaksi');
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function getAllPengeluaranKas() {
+  return new Promise((resolve, reject) => {
+    const tx = dbInstance.transaction(['pengeluaran_kas'], 'readonly');
+    const store = tx.objectStore('pengeluaran_kas');
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function savePengeluaranKas(entry) {
+  return new Promise((resolve, reject) => {
+    const tx = dbInstance.transaction(['pengeluaran_kas'], 'readwrite');
+    const store = tx.objectStore('pengeluaran_kas');
+    const req = store.add(entry);
+    req.onsuccess = () => resolve(entry);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function getAllVoidTransaksi() {
+  return new Promise((resolve, reject) => {
+    const tx = dbInstance.transaction(['void_transaksi'], 'readonly');
+    const store = tx.objectStore('void_transaksi');
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+
 // --- 7. NAVIGASI TAMPILAN ---
 function showView(viewId) {
   document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
@@ -1228,6 +1331,16 @@ function enforceRoleUI() {
       el.classList.add('hidden');
     }
   });
+  // Menu Laporan khusus Pemilik (Tahap 5)
+  const menuLaporan = document.getElementById('menu-laporan');
+  if (menuLaporan) {
+    if (isPemilik) {
+      menuLaporan.classList.remove('hidden');
+    } else {
+      menuLaporan.classList.add('hidden');
+    }
+  }
+
 }
 
 // --- 8. ALUR AUTENTIKASI & LOCKOUT ---
@@ -3053,6 +3166,645 @@ async function eksekusiSimpanPembayaranBon(e) {
   }
 }
 
+
+// --- 12B. FITUR TAHAP 5: SHIFT KASIR & REKONSILIASI KAS ---
+
+// Menghitung angka shift segar dari DB (Shift Aktif maupun Selesai)
+async function hitungDataShift(shiftId) {
+  const shift = await getShiftById(shiftId);
+  if (!shift) return null;
+
+  const [allTrx, allPay, allBonPay, allExpenses, allUsers] = await Promise.all([
+    getAllTransaksi(),
+    getAllPembayaranTransaksi(),
+    getAllPembayaranBon(),
+    getAllPengeluaranKas(),
+    getAllUsers()
+  ]);
+
+  const kasirUser = allUsers.find(u => u.id === shift.kasir_id);
+  const kasirNama = kasirUser ? kasirUser.nama : 'Kasir';
+
+  // Transaksi milik shift ini
+  const shiftTrx = allTrx.filter(t => t.shift_id === shiftId && t.status === 'selesai');
+  const shiftTrxIds = new Set(shiftTrx.map(t => t.id));
+
+  // Pembayaran transaksi shift ini
+  const shiftPays = allPay.filter(p => shiftTrxIds.has(p.transaksi_id));
+
+  let tunaiPenjualan = 0;
+  let qrisPenjualan = 0;
+  let bonPenjualan = 0;
+
+  shiftPays.forEach(p => {
+    const nom = Number(p.nominal) || 0;
+    if (p.metode === 'tunai') tunaiPenjualan += nom;
+    else if (p.metode === 'qris') qrisPenjualan += nom;
+    else if (p.metode === 'bon') bonPenjualan += nom;
+  });
+
+  const totalPenjualan = shiftTrx.reduce((acc, t) => acc + (Number(t.total) || 0), 0);
+
+  // Pembayaran bon tunai yang masuk shift ini
+  const shiftBonPays = allBonPay.filter(b => b.shift_id === shiftId);
+  const tunaiBayarBon = shiftBonPays
+    .filter(b => b.metode === 'tunai')
+    .reduce((acc, b) => acc + (Number(b.jumlah) || 0), 0);
+
+  // Pengeluaran kas shift ini
+  const shiftExpenses = allExpenses.filter(e => e.shift_id === shiftId);
+  const totalPengeluaran = shiftExpenses.reduce((acc, e) => acc + (Number(e.jumlah) || 0), 0);
+
+  // Rumus Kas Diharapkan = Modal Awal + Tunai Jual + Tunai Bon − Pengeluaran
+  const modalAwal = Number(shift.modal_awal) || 0;
+  const kasDiharapkan = modalAwal + tunaiPenjualan + tunaiBayarBon - totalPengeluaran;
+
+  return {
+    shift,
+    kasirNama,
+    modalAwal,
+    shiftTrx,
+    totalPenjualan,
+    tunaiPenjualan,
+    qrisPenjualan,
+    bonPenjualan,
+    tunaiBayarBon,
+    shiftExpenses,
+    totalPengeluaran,
+    kasDiharapkan,
+    shiftBonPays
+  };
+}
+
+async function renderShiftScreen() {
+  const active = await getActiveShift();
+  const noActiveBox = document.getElementById('shift-no-active-box');
+  const activeBox = document.getElementById('shift-active-box');
+
+  if (!active) {
+    activeShiftCalculation = null;
+    noActiveBox.classList.remove('hidden');
+    activeBox.classList.add('hidden');
+  } else {
+    noActiveBox.classList.add('hidden');
+    activeBox.classList.remove('hidden');
+
+    const calc = await hitungDataShift(active.id);
+    activeShiftCalculation = calc;
+
+    const dOpen = new Date(calc.shift.waktu_buka);
+    const timeStr = `${dOpen.getDate()}/${dOpen.getMonth() + 1} ${dOpen.getHours().toString().padStart(2, '0')}:${dOpen.getMinutes().toString().padStart(2, '0')}`;
+
+    document.getElementById('shift-active-opened-at').textContent = `Buka: ${timeStr} WIB`;
+    document.getElementById('shift-active-kasir-nama').textContent = `Kasir: ${calc.kasirNama}`;
+    document.getElementById('shift-active-modal-awal').textContent = formatRp(calc.modalAwal);
+    document.getElementById('shift-active-penjualan-total').textContent = formatRp(calc.totalPenjualan);
+
+    document.getElementById('shift-active-tunai-jual').textContent = formatRp(calc.tunaiPenjualan);
+    document.getElementById('shift-active-qris-jual').textContent = formatRp(calc.qrisPenjualan);
+    document.getElementById('shift-active-bon-jual').textContent = formatRp(calc.bonPenjualan);
+    document.getElementById('shift-active-bayarbon-tunai').textContent = formatRp(calc.tunaiBayarBon);
+    document.getElementById('shift-active-pengeluaran-total').textContent = formatRp(calc.totalPengeluaran);
+
+    document.getElementById('shift-active-kas-diharapkan').textContent = formatRp(calc.kasDiharapkan);
+
+    renderActiveExpensesList(calc.shiftExpenses);
+  }
+
+  await renderShiftHistoryList();
+  showView('view-shift');
+}
+
+function renderActiveExpensesList(expenses) {
+  const container = document.getElementById('shift-active-pengeluaran-list');
+  const countLabel = document.getElementById('shift-active-pengeluaran-count');
+  container.innerHTML = '';
+
+  countLabel.textContent = `${expenses.length} pengeluaran`;
+
+  if (expenses.length === 0) {
+    container.innerHTML = '<div class="text-xs text-muted text-center" style="padding: 10px;">Belum ada pengeluaran kas.</div>';
+    return;
+  }
+
+  // Tampilkan terbaru di atas
+  const sorted = [...expenses].sort((a, b) => new Date(b.waktu) - new Date(a.waktu));
+
+  sorted.forEach(e => {
+    const d = new Date(e.waktu);
+    const timeStr = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+    const jenisLabel = e.jenis === 'setor_pemilik' ? 'Setor ke Pemilik' : 'Operasional';
+
+    const item = document.createElement('div');
+    item.className = 'expense-item';
+    item.innerHTML = `
+      <div class="expense-left">
+        <div class="expense-title">${e.keterangan || '-'}</div>
+        <div class="expense-meta">${timeStr} • ${jenisLabel}</div>
+      </div>
+      <div class="expense-amount">− ${formatRp(e.jumlah)}</div>
+    `;
+    container.appendChild(item);
+  });
+}
+
+async function renderShiftHistoryList() {
+  const container = document.getElementById('shift-history-list');
+  container.innerHTML = '';
+
+  const [allShifts, allUsers] = await Promise.all([
+    getAllShifts(),
+    getAllUsers()
+  ]);
+
+  const userMap = {};
+  allUsers.forEach(u => { userMap[u.id] = u.nama; });
+
+  const finishedShifts = allShifts
+    .filter(s => s.status === 'selesai')
+    .sort((a, b) => new Date(b.waktu_buka) - new Date(a.waktu_buka));
+
+  if (finishedShifts.length === 0) {
+    container.innerHTML = '<div class="text-xs text-muted text-center" style="padding: 14px;">Belum ada shift selesai.</div>';
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+
+  for (const s of finishedShifts) {
+    const kasirNama = userMap[s.kasir_id] || 'Kasir';
+    const dBuka = new Date(s.waktu_buka);
+    const dTut = s.waktu_tutup ? new Date(s.waktu_tutup) : null;
+    const dateStr = `${dBuka.getDate()}/${dBuka.getMonth() + 1}/${dBuka.getFullYear()}`;
+    const timeStr = `${dBuka.getHours().toString().padStart(2, '0')}:${dBuka.getMinutes().toString().padStart(2, '0')} – ${dTut ? `${dTut.getHours().toString().padStart(2, '0')}:${dTut.getMinutes().toString().padStart(2, '0')}` : '-'}`;
+
+    const selisih = Number(s.selisih) || 0;
+    let badgeClass = 'badge-selisih-pas';
+    let selisihTeks = `Pas (${formatRp(0)})`;
+
+    if (selisih < 0) {
+      badgeClass = 'badge-selisih-minus';
+      selisihTeks = `Minus ${formatRp(Math.abs(selisih))}`;
+    } else if (selisih > 0) {
+      badgeClass = 'badge-selisih-plus';
+      selisihTeks = `Plus ${formatRp(selisih)}`;
+    }
+
+    const item = document.createElement('div');
+    item.className = 'shift-history-item';
+    item.onclick = () => openShiftDetail(s.id);
+
+    item.innerHTML = `
+      <div class="shift-hist-left">
+        <div class="shift-hist-kasir">${kasirNama}</div>
+        <div class="shift-hist-time">${dateStr} • ${timeStr}</div>
+      </div>
+      <div class="shift-hist-right">
+        <span class="badge-selisih ${badgeClass} text-xs">${selisihTeks}</span>
+        <span class="text-xs text-muted">Aktual: ${formatRp(s.kas_aktual || 0)}</span>
+      </div>
+    `;
+
+    fragment.appendChild(item);
+  }
+
+  container.appendChild(fragment);
+}
+
+// Buka Detail Riwayat Shift Selesai
+async function openShiftDetail(shiftId) {
+  activeDetailShiftId = shiftId;
+  const calc = await hitungDataShift(shiftId);
+  if (!calc) return;
+
+  const s = calc.shift;
+  const dBuka = new Date(s.waktu_buka);
+  const dTut = s.waktu_tutup ? new Date(s.waktu_tutup) : null;
+
+  document.getElementById('detail-shift-kasir-nama').textContent = `Kasir: ${calc.kasirNama}`;
+  document.getElementById('detail-shift-tanggal').textContent = `${dBuka.getDate()}/${dBuka.getMonth() + 1}/${dBuka.getFullYear()}`;
+  document.getElementById('detail-shift-jam-rentang').textContent =
+    `Buka: ${dBuka.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} • ` +
+    `Tutup: ${dTut ? dTut.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}`;
+
+  document.getElementById('detail-shift-modal-awal').textContent = formatRp(calc.modalAwal);
+  document.getElementById('detail-shift-total-penjualan').textContent = formatRp(calc.totalPenjualan);
+  document.getElementById('detail-shift-kas-diharapkan').textContent = formatRp(calc.kasDiharapkan);
+  document.getElementById('detail-shift-kas-aktual').textContent = formatRp(s.kas_aktual || 0);
+
+  const selisih = Number(s.selisih) || 0;
+  const selisihLabel = document.getElementById('detail-shift-selisih-label');
+  if (selisih === 0) {
+    selisihLabel.className = 'badge-selisih badge-selisih-pas';
+    selisihLabel.textContent = 'Pas (Rp 0)';
+  } else if (selisih < 0) {
+    selisihLabel.className = 'badge-selisih badge-selisih-minus';
+    selisihLabel.textContent = `Kurang ${formatRp(Math.abs(selisih))}`;
+  } else {
+    selisihLabel.className = 'badge-selisih badge-selisih-plus';
+    selisihLabel.textContent = `Lebih +${formatRp(selisih)}`;
+  }
+
+  document.getElementById('detail-shift-tunai-jual').textContent = formatRp(calc.tunaiPenjualan);
+  document.getElementById('detail-shift-qris-jual').textContent = formatRp(calc.qrisPenjualan);
+  document.getElementById('detail-shift-bon-jual').textContent = formatRp(calc.bonPenjualan);
+  document.getElementById('detail-shift-bayarbon-tunai').textContent = formatRp(calc.tunaiBayarBon);
+  document.getElementById('detail-shift-total-pengeluaran').textContent = formatRp(calc.totalPengeluaran);
+
+  // Daftar Pengeluaran Shift
+  const expContainer = document.getElementById('detail-shift-pengeluaran-list');
+  expContainer.innerHTML = '';
+  if (calc.shiftExpenses.length === 0) {
+    expContainer.innerHTML = '<div class="text-xs text-muted text-center" style="padding: 8px;">Tidak ada pengeluaran kas.</div>';
+  } else {
+    calc.shiftExpenses.forEach(e => {
+      const d = new Date(e.waktu);
+      const timeStr = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+      const jenis = e.jenis === 'setor_pemilik' ? 'Setor ke Pemilik' : 'Operasional';
+      const row = document.createElement('div');
+      row.className = 'expense-item';
+      row.innerHTML = `
+        <div class="expense-left">
+          <div class="expense-title">${e.keterangan || '-'}</div>
+          <div class="expense-meta">${timeStr} • ${jenis}</div>
+        </div>
+        <div class="expense-amount">− ${formatRp(e.jumlah)}</div>
+      `;
+      expContainer.appendChild(row);
+    });
+  }
+
+  // Tabel Transaksi Penjualan Shift
+  const trxBody = document.getElementById('detail-shift-table-transaksi');
+  trxBody.innerHTML = '';
+  if (calc.shiftTrx.length === 0) {
+    trxBody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Belum ada transaksi penjualan.</td></tr>';
+  } else {
+    calc.shiftTrx.forEach(t => {
+      const d = new Date(t.waktu);
+      const timeStr = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="text-xs text-muted">${timeStr}</td>
+        <td class="font-bold text-xs">${t.nomor}</td>
+        <td class="font-bold text-amber">${formatRp(t.total)}</td>
+      `;
+      trxBody.appendChild(tr);
+    });
+  }
+
+  // Tabel Cicilan Bon Shift
+  const bonBody = document.getElementById('detail-shift-table-bayarbon');
+  bonBody.innerHTML = '';
+  if (calc.shiftBonPays.length === 0) {
+    bonBody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Tidak ada pembayaran bon di shift ini.</td></tr>';
+  } else {
+    calc.shiftBonPays.forEach(b => {
+      const d = new Date(b.waktu);
+      const timeStr = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="text-xs text-muted">${timeStr}</td>
+        <td class="text-xs font-bold">${(b.metode || 'tunai').toUpperCase()}</td>
+        <td class="font-bold text-success">${formatRp(b.jumlah)}</td>
+      `;
+      bonBody.appendChild(tr);
+    });
+  }
+
+  showView('view-shift-detail');
+}
+
+// Buka Modal Tambah Pengeluaran
+function openPengeluaranModal() {
+  if (!activeShiftCalculation || !activeShiftCalculation.shift) {
+    alert('Tidak ada shift aktif!');
+    return;
+  }
+  document.getElementById('form-pengeluaran-kas').reset();
+  document.getElementById('modal-pengeluaran').classList.remove('hidden');
+  document.getElementById('input-pengeluaran-jumlah').focus();
+}
+
+// Simpan Pengeluaran Kas
+async function eksekusiSimpanPengeluaran(e) {
+  e.preventDefault();
+  if (!activeShiftCalculation || !activeShiftCalculation.shift) return;
+
+  const jenis = document.getElementById('select-pengeluaran-jenis').value;
+  const jumlah = Math.round(Number(document.getElementById('input-pengeluaran-jumlah').value) || 0);
+  const keterangan = document.getElementById('input-pengeluaran-ket').value.trim();
+
+  if (jumlah <= 0) {
+    alert('Jumlah pengeluaran harus lebih dari 0!');
+    return;
+  }
+  if (!keterangan) {
+    alert('Keterangan pengeluaran wajib diisi!');
+    return;
+  }
+
+  const newExpense = {
+    id: generateUUID(),
+    shift_id: activeShiftCalculation.shift.id,
+    jenis: jenis,
+    jumlah: jumlah,
+    keterangan: keterangan,
+    pengguna_id: currentUser ? currentUser.id : 'sistem',
+    waktu: new Date().toISOString()
+  };
+
+  await savePengeluaranKas(newExpense);
+
+  await catatLog(currentUser ? currentUser.id : 'sistem', 'PENGELUARAN_KAS', 'pengeluaran_kas', {
+    shift_id: newExpense.shift_id,
+    jenis: jenis,
+    jumlah: jumlah,
+    keterangan: keterangan
+  });
+
+  document.getElementById('modal-pengeluaran').classList.add('hidden');
+  await renderShiftScreen();
+}
+
+// Buka Modal Tutup Shift
+function openTutupShiftModal() {
+  if (!activeShiftCalculation || !activeShiftCalculation.shift) {
+    alert('Tidak ada shift aktif!');
+    return;
+  }
+
+  const calc = activeShiftCalculation;
+  document.getElementById('modal-tutup-modal-awal').textContent = formatRp(calc.modalAwal);
+  document.getElementById('modal-tutup-kas-diharapkan').textContent = formatRp(calc.kasDiharapkan);
+
+  const inputAktual = document.getElementById('input-tutup-kas-aktual');
+  inputAktual.value = '';
+
+  updateTutupShiftSelisihUI();
+
+  document.getElementById('modal-tutup-shift').classList.remove('hidden');
+  inputAktual.focus();
+}
+
+function updateTutupShiftSelisihUI() {
+  if (!activeShiftCalculation) return;
+
+  const kasDiharapkan = activeShiftCalculation.kasDiharapkan;
+  const rawAktual = document.getElementById('input-tutup-kas-aktual').value;
+  const aktualVal = rawAktual === '' ? kasDiharapkan : Math.round(Number(rawAktual) || 0);
+  const selisih = aktualVal - kasDiharapkan;
+
+  const badge = document.getElementById('modal-tutup-selisih-badge');
+  const warning = document.getElementById('modal-tutup-warning');
+
+  if (rawAktual === '') {
+    badge.className = 'badge-selisih badge-selisih-pas';
+    badge.textContent = 'Belum diisi';
+    warning.classList.add('hidden');
+    return;
+  }
+
+  if (selisih === 0) {
+    badge.className = 'badge-selisih badge-selisih-pas';
+    badge.textContent = 'Pas (Rp 0)';
+    warning.classList.add('hidden');
+  } else if (selisih < 0) {
+    badge.className = 'badge-selisih badge-selisih-minus';
+    badge.textContent = `Kurang ${formatRp(Math.abs(selisih))}`;
+    warning.classList.remove('hidden');
+  } else {
+    badge.className = 'badge-selisih badge-selisih-plus';
+    badge.textContent = `Lebih +${formatRp(selisih)}`;
+    warning.classList.remove('hidden');
+  }
+}
+
+// Konfirmasi Tutup Shift
+async function eksekusiTutupShift(e) {
+  e.preventDefault();
+  if (!activeShiftCalculation || !activeShiftCalculation.shift) return;
+
+  const rawAktual = document.getElementById('input-tutup-kas-aktual').value;
+  if (rawAktual === '') {
+    alert('Wajib mengisi kas aktual fisik di laci!');
+    return;
+  }
+
+  const kasAktual = Math.round(Number(rawAktual) || 0);
+  if (kasAktual < 0) {
+    alert('Kas fisik di laci tidak boleh negatif!');
+    return;
+  }
+
+  const kasDiharapkan = activeShiftCalculation.kasDiharapkan;
+  const selisih = kasAktual - kasDiharapkan;
+  const nowIso = new Date().toISOString();
+
+  const shiftToUpdate = {
+    ...activeShiftCalculation.shift,
+    status: 'selesai',
+    waktu_tutup: nowIso,
+    kas_aktual: kasAktual,
+    selisih: selisih
+  };
+
+  await saveShift(shiftToUpdate);
+
+  await catatLog(currentUser ? currentUser.id : 'sistem', 'TUTUP_SHIFT', 'shift', {
+    shift_id: shiftToUpdate.id,
+    kasir_id: shiftToUpdate.kasir_id,
+    modal_awal: shiftToUpdate.modal_awal,
+    kas_diharapkan: kasDiharapkan,
+    kas_aktual: kasAktual,
+    selisih: selisih
+  });
+
+  currentShift = null;
+  activeShiftCalculation = null;
+
+  document.getElementById('modal-tutup-shift').classList.add('hidden');
+
+  let ringkasanAlert = 'Shift berhasil ditutup!\n' +
+    `Kas Diharapkan: ${formatRp(kasDiharapkan)}\n` +
+    `Kas Aktual: ${formatRp(kasAktual)}\n`;
+
+  if (selisih === 0) ringkasanAlert += 'Status: Pas (Rp 0)';
+  else if (selisih < 0) ringkasanAlert += `Status: Kurang ${formatRp(Math.abs(selisih))}`;
+  else ringkasanAlert += `Status: Lebih +${formatRp(selisih)}`;
+
+  alert(ringkasanAlert);
+  renderDashboard();
+}
+
+// --- 12C. FITUR TAHAP 5: LAPORAN PENJUALAN HARIAN ---
+async function renderLaporanScreen(targetDateStr = null) {
+  if (!currentUser || currentUser.peran !== 'pemilik') {
+    alert('Akses khusus Pemilik!');
+    renderDashboard();
+    return;
+  }
+
+  const dateInput = document.getElementById('input-laporan-tanggal');
+  if (!targetDateStr) {
+    targetDateStr = getJakartaISODateString(new Date());
+    dateInput.value = targetDateStr;
+  } else {
+    dateInput.value = targetDateStr;
+  }
+
+  const [allTrx, allItems, allPays, allBonPays, allVoids] = await Promise.all([
+    getAllTransaksi(),
+    getAllTransaksiItems(),
+    getAllPembayaranTransaksi(),
+    getAllPembayaranBon(),
+    getAllVoidTransaksi()
+  ]);
+
+  // Filter transaksi pada tanggal target (WIB)
+  const dayTrx = allTrx.filter(t => {
+    if (t.status !== 'selesai') return false;
+    const dStr = getJakartaISODateString(new Date(t.waktu));
+    return dStr === targetDateStr;
+  });
+
+  const emptyBox = document.getElementById('laporan-empty-box');
+  const contentBox = document.getElementById('laporan-content-box');
+
+  if (dayTrx.length === 0) {
+    emptyBox.classList.remove('hidden');
+    contentBox.classList.add('hidden');
+    showView('view-laporan');
+    return;
+  }
+
+  emptyBox.classList.add('hidden');
+  contentBox.classList.remove('hidden');
+
+  const dayTrxIds = new Set(dayTrx.map(t => t.id));
+
+  // Penjualan Kotor = Σ total transaksi selesai
+  const penjualanKotor = dayTrx.reduce((acc, t) => acc + (Number(t.total) || 0), 0);
+
+  // Total Void hari itu (dari store void_transaksi, saat ini 0)
+  const dayVoids = allVoids.filter(v => {
+    const dStr = getJakartaISODateString(new Date(v.waktu));
+    return dStr === targetDateStr;
+  });
+  const totalVoid = dayVoids.reduce((acc, v) => acc + (Number(v.total_void) || 0), 0);
+  const penjualanBersih = penjualanKotor - totalVoid;
+
+  document.getElementById('laporan-penjualan-bersih').textContent = formatRp(penjualanBersih);
+  document.getElementById('laporan-penjualan-kotor').textContent = formatRp(penjualanKotor);
+  document.getElementById('laporan-total-void').textContent = formatRp(totalVoid);
+  document.getElementById('laporan-total-transaksi').textContent = `${dayTrx.length} transaksi`;
+
+  // Rincian Pembayaran Transaksi Hari Itu
+  const dayPays = allPays.filter(p => dayTrxIds.has(p.transaksi_id));
+  let payTunai = 0;
+  let payQris = 0;
+  let payBon = 0;
+
+  dayPays.forEach(p => {
+    const nom = Number(p.nominal) || 0;
+    if (p.metode === 'tunai') payTunai += nom;
+    else if (p.metode === 'qris') payQris += nom;
+    else if (p.metode === 'bon') payBon += nom;
+  });
+
+  document.getElementById('laporan-pay-tunai').textContent = formatRp(payTunai);
+  document.getElementById('laporan-pay-qris').textContent = formatRp(payQris);
+  document.getElementById('laporan-pay-bon').textContent = formatRp(payBon);
+
+  // Pembayaran Bon yang Diterima Hari Ini (Bukan Omzet, tapi arus kas masuk)
+  const dayBonPays = allBonPays.filter(b => {
+    const dStr = getJakartaISODateString(new Date(b.waktu));
+    return dStr === targetDateStr;
+  });
+
+  let bonBayarTunai = 0;
+  let bonBayarQris = 0;
+
+  dayBonPays.forEach(b => {
+    const nom = Number(b.jumlah) || 0;
+    if (b.metode === 'tunai') bonBayarTunai += nom;
+    else if (b.metode === 'qris') bonBayarQris += nom;
+  });
+
+  document.getElementById('laporan-bon-tunai').textContent = formatRp(bonBayarTunai);
+  document.getElementById('laporan-bon-qris').textContent = formatRp(bonBayarQris);
+
+  // 5 Produk Terlaris Hari Ini
+  const dayItems = allItems.filter(i => dayTrxIds.has(i.transaksi_id));
+  const productAgg = {};
+
+  dayItems.forEach(i => {
+    if (!productAgg[i.produk_id]) {
+      productAgg[i.produk_id] = {
+        nama: i.nama_produk,
+        qty_dasar: 0,
+        subtotal: 0
+      };
+    }
+    productAgg[i.produk_id].qty_dasar += Number(i.jumlah_dasar) || 0;
+    productAgg[i.produk_id].subtotal += Number(i.subtotal) || 0;
+  });
+
+  const sortedTopProds = Object.values(productAgg)
+    .sort((a, b) => b.qty_dasar - a.qty_dasar)
+    .slice(0, 5);
+
+  const topListContainer = document.getElementById('laporan-top-produk-list');
+  topListContainer.innerHTML = '';
+
+  if (sortedTopProds.length === 0) {
+    topListContainer.innerHTML = '<div class="text-xs text-muted text-center" style="padding: 8px;">Tidak ada rincian item.</div>';
+  } else {
+    sortedTopProds.forEach((p, idx) => {
+      const row = document.createElement('div');
+      row.className = 'top-product-item';
+      row.innerHTML = `
+        <div>
+          <span class="top-prod-rank">${idx + 1}</span>
+          <span class="font-bold">${p.nama}</span>
+          <span class="text-xs text-muted">${p.qty_dasar} unit dasar</span>
+        </div>
+        <div class="font-bold text-amber">${formatRp(p.subtotal)}</div>
+      `;
+      topListContainer.appendChild(row);
+    });
+  }
+
+  // Tombol Share WhatsApp
+  const btnShareWA = document.getElementById('btn-share-wa-laporan');
+  btnShareWA.onclick = async () => {
+    const warungName = (await getPengaturan('nama_warung')) || 'WarungKas';
+    const top1 = sortedTopProds.length > 0 ? `${sortedTopProds[0].nama} (${sortedTopProds[0].qty_dasar} unit)` : '-';
+
+    const waText =
+      `*Laporan Penjualan ${warungName}*\n` +
+      `Tanggal: ${targetDateStr}\n` +
+      `--------------------------------\n` +
+      `• Penjualan Bersih: ${formatRp(penjualanBersih)}\n` +
+      `• Jumlah Transaksi: ${dayTrx.length}\n` +
+      `• Rincian Penjualan:\n` +
+      `  - Tunai: ${formatRp(payTunai)}\n` +
+      `  - QRIS: ${formatRp(payQris)}\n` +
+      `  - Bon: ${formatRp(payBon)}\n` +
+      `• Cicilan Bon Masuk:\n` +
+      `  - Tunai: ${formatRp(bonBayarTunai)}\n` +
+      `  - QRIS: ${formatRp(bonBayarQris)}\n` +
+      `• Produk Terlaris: ${top1}\n` +
+      `--------------------------------`;
+
+    const url = `https://wa.me/?text=${encodeURIComponent(waText)}`;
+    window.open(url, '_blank');
+  };
+
+  showView('view-laporan');
+}
+
+
 // --- 13. EVENT LISTENERS ---
 function setupEventListeners() {
   // Setup Awal Form
@@ -3675,6 +4427,39 @@ function setupEventListeners() {
     alert(`Kasir "${nama}" berhasil didaftarkan!`);
     await refreshUserTable();
     await refreshLogTable();
+  });
+
+  // --- TAHAP 5: EVENT LISTENERS SHIFT & LAPORAN ---
+  document.getElementById('menu-shift').addEventListener('click', renderShiftScreen);
+  document.getElementById('btn-shift-back').addEventListener('click', renderDashboard);
+
+  document.getElementById('btn-shift-go-kasir').addEventListener('click', enterKasirModule);
+
+  document.getElementById('btn-open-modal-pengeluaran').addEventListener('click', openPengeluaranModal);
+  document.getElementById('btn-close-modal-pengeluaran').addEventListener('click', () => {
+    document.getElementById('modal-pengeluaran').classList.add('hidden');
+  });
+  document.getElementById('form-pengeluaran-kas').addEventListener('submit', eksekusiSimpanPengeluaran);
+
+  document.getElementById('btn-open-modal-tutup-shift').addEventListener('click', openTutupShiftModal);
+  document.getElementById('btn-close-modal-tutup').addEventListener('click', () => {
+    document.getElementById('modal-tutup-shift').classList.add('hidden');
+  });
+  document.getElementById('input-tutup-kas-aktual').addEventListener('input', updateTutupShiftSelisihUI);
+  document.getElementById('form-tutup-shift').addEventListener('submit', eksekusiTutupShift);
+
+  document.getElementById('btn-back-shift-detail').addEventListener('click', renderShiftScreen);
+
+  // Menu & Layar Laporan
+  document.getElementById('menu-laporan').addEventListener('click', () => {
+    renderLaporanScreen();
+  });
+  document.getElementById('btn-laporan-back').addEventListener('click', renderDashboard);
+
+  document.getElementById('input-laporan-tanggal').addEventListener('change', (e) => {
+    if (e.target.value) {
+      renderLaporanScreen(e.target.value);
+    }
   });
 }
 

@@ -1115,3 +1115,170 @@ label {
   width: 18px;
   height: 18px;
 }
+
+/* --- TAHAP 5: SHIFT KASIR & LAPORAN --- */
+.shift-hero-card {
+  background: linear-gradient(135deg, #1e293b 0%, #172033 100%);
+  border: 1px solid var(--border-color);
+}
+
+.cash-expected-box {
+  background-color: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  text-align: center;
+}
+
+.cash-expected-amount {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--primary);
+  margin: 4px 0;
+}
+
+.expense-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.expense-item {
+  background-color: var(--bg-input);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.expense-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.expense-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.expense-meta {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.expense-amount {
+  font-weight: 700;
+  color: var(--danger);
+  font-size: 0.95rem;
+}
+
+.badge-selisih {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.badge-selisih-pas {
+  background-color: rgba(16, 185, 129, 0.2);
+  color: var(--success);
+  border: 1px solid var(--success);
+}
+
+.badge-selisih-minus {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+}
+
+.badge-selisih-plus {
+  background-color: rgba(245, 158, 11, 0.2);
+  color: var(--primary);
+  border: 1px solid var(--primary);
+}
+
+.shift-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.shift-history-item {
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.shift-history-item:active {
+  background-color: #243247;
+}
+
+.shift-hist-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.shift-hist-kasir {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.shift-hist-time {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.shift-hist-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.report-hero-amount {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--primary);
+  margin: 4px 0;
+}
+
+.top-product-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.top-product-item {
+  background-color: var(--bg-input);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+.top-prod-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background-color: var(--bg-card);
+  color: var(--primary);
+  font-weight: 800;
+  font-size: 0.75rem;
+  margin-right: 6px;
+}

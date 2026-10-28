@@ -133,16 +133,18 @@
             <span class="badge-stage badge-active">Tersedia</span>
           </div>
 
-          <div class="menu-card menu-card-disabled">
+          <!-- TAHAP 5: MENU SHIFT KASIR DIAKTIFKAN -->
+          <div class="menu-card" id="menu-shift">
             <div class="menu-icon">⏱️</div>
             <div class="menu-label">Shift Kasir</div>
-            <span class="badge-stage">Tahap 5</span>
+            <span class="badge-stage badge-active">Tersedia</span>
           </div>
 
-          <div class="menu-card menu-card-disabled">
+          <!-- TAHAP 5: MENU LAPORAN DIAKTIFKAN (KHUSUS PEMILIK) -->
+          <div class="menu-card" id="menu-laporan">
             <div class="menu-icon">📊</div>
             <div class="menu-label">Laporan</div>
-            <span class="badge-stage">Tahap 5</span>
+            <span class="badge-stage badge-active">Tersedia</span>
           </div>
 
           <div class="menu-card" id="menu-pengaturan">
@@ -565,6 +567,375 @@
         </form>
       </div>
     </div>
+
+    <!-- TAHAP 5: LAYAR SHIFT KASIR -->
+    <section id="view-shift" class="view hidden">
+      <header class="top-nav">
+        <button type="button" id="btn-shift-back" class="btn btn-secondary btn-sm">← Beranda</button>
+        <div class="nav-title">Shift Kasir</div>
+        <div style="width: 60px;"></div>
+      </header>
+
+      <main class="content-body">
+        <!-- JIKA TIDAK ADA SHIFT AKTIF -->
+        <div id="shift-no-active-box" class="card text-center mb-3 hidden">
+          <div class="menu-icon mb-2">⏱️</div>
+          <h3 class="font-bold mb-1">Tidak Ada Shift Aktif</h3>
+          <p class="text-xs text-muted mb-2">Buka menu Kasir POS untuk mulai membuka shift dan mencatat modal awal di laci.</p>
+          <button type="button" id="btn-shift-go-kasir" class="btn btn-primary btn-block btn-sm">Buka Kasir POS</button>
+        </div>
+
+        <!-- JIKA ADA SHIFT AKTIF -->
+        <div id="shift-active-box" class="mb-3 hidden">
+          <div class="card mb-3 shift-hero-card">
+            <div class="flex-between mb-1">
+              <span class="badge-stage badge-active">Shift Berlangsung</span>
+              <span id="shift-active-opened-at" class="text-xs text-muted">Buka: -</span>
+            </div>
+            <h2 id="shift-active-kasir-nama" class="font-bold mb-2">Kasir: -</h2>
+
+            <div class="detail-grid mb-3">
+              <div>
+                <div class="text-xs text-muted">Modal Awal Laci</div>
+                <div id="shift-active-modal-awal" class="font-bold">-</div>
+              </div>
+              <div>
+                <div class="text-xs text-muted">Total Penjualan</div>
+                <div id="shift-active-penjualan-total" class="font-bold text-amber">-</div>
+              </div>
+            </div>
+
+            <div class="card mb-3" style="background-color: var(--bg-input);">
+              <div class="text-xs font-bold mb-2 text-muted">Rincian Arus Kas Shift Ini:</div>
+              <div class="flex-between text-xs mb-1">
+                <span>+ Tunai Penjualan</span>
+                <strong id="shift-active-tunai-jual">Rp 0</strong>
+              </div>
+              <div class="flex-between text-xs mb-1">
+                <span>+ QRIS Penjualan</span>
+                <span id="shift-active-qris-jual" class="text-muted">Rp 0</span>
+              </div>
+              <div class="flex-between text-xs mb-1">
+                <span>• Bon Penjualan (Kredit)</span>
+                <span id="shift-active-bon-jual" class="text-muted">Rp 0</span>
+              </div>
+              <div class="flex-between text-xs mb-1 pt-1" style="border-top: 1px solid var(--border-color);">
+                <span>+ Bayar Bon Tunai (Masuk Laci)</span>
+                <strong id="shift-active-bayarbon-tunai" class="text-success">Rp 0</strong>
+              </div>
+              <div class="flex-between text-xs mb-1">
+                <span>− Pengeluaran Kas (Keluar Laci)</span>
+                <strong id="shift-active-pengeluaran-total" class="text-danger">Rp 0</strong>
+              </div>
+            </div>
+
+            <div class="cash-expected-box mb-3">
+              <div class="text-xs text-muted">Kas Fisik Diharapkan di Laci:</div>
+              <div id="shift-active-kas-diharapkan" class="cash-expected-amount">Rp 0</div>
+              <div class="text-xs text-muted">Modal Awal + Tunai Jual + Tunai Bon − Pengeluaran</div>
+            </div>
+
+            <div class="flex-between" style="gap: 10px;">
+              <button type="button" id="btn-open-modal-pengeluaran" class="btn btn-secondary flex-1 btn-sm">
+                💸 Tambah Pengeluaran
+              </button>
+              <button type="button" id="btn-open-modal-tutup-shift" class="btn btn-primary flex-1 btn-sm">
+                🛑 Tutup Shift
+              </button>
+            </div>
+          </div>
+
+          <!-- DAFTAR PENGELUARAN SHIFT AKTIF -->
+          <div class="card mb-3">
+            <div class="flex-between mb-2">
+              <h3 class="card-title mb-0">Pengeluaran Kas Shift Ini</h3>
+              <span id="shift-active-pengeluaran-count" class="text-xs text-muted">0 pengeluaran</span>
+            </div>
+            <div id="shift-active-pengeluaran-list" class="expense-list"></div>
+          </div>
+        </div>
+
+        <!-- RIWAYAT SHIFT SEBELUMNYA -->
+        <div class="card mb-3">
+          <h3 class="card-title mb-2">Riwayat Shift Selesai</h3>
+          <div id="shift-history-list" class="shift-history-list"></div>
+        </div>
+      </main>
+    </section>
+
+    <!-- TAHAP 5: MODAL TAMBAH PENGELUARAN KAS -->
+    <div id="modal-pengeluaran" class="modal-overlay hidden">
+      <div class="modal-card">
+        <h3 class="card-title mb-1">Tambah Pengeluaran Kas</h3>
+        <p class="text-xs text-muted mb-3">Uang tunai keluar langsung dari laci kasir.</p>
+
+        <form id="form-pengeluaran-kas" class="form-vertical" autocomplete="off">
+          <div class="form-group">
+            <label for="select-pengeluaran-jenis">Jenis Pengeluaran *</label>
+            <select id="select-pengeluaran-jenis" class="form-input" required>
+              <option value="operasional">Operasional (Beli es batu, kresek, dll)</option>
+              <option value="setor_pemilik">Setor ke Pemilik</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="input-pengeluaran-jumlah">Jumlah Uang Keluar (Rp) *</label>
+            <input type="number" id="input-pengeluaran-jumlah" class="form-input" min="1" step="1" placeholder="Contoh: 15000" required>
+          </div>
+
+          <div class="form-group">
+            <label for="input-pengeluaran-ket">Keterangan Pengeluaran *</label>
+            <input type="text" id="input-pengeluaran-ket" class="form-input" placeholder="Contoh: Beli es batu 3 bal" required>
+          </div>
+
+          <div class="modal-actions mt-2">
+            <button type="button" id="btn-close-modal-pengeluaran" class="btn btn-secondary flex-1">Batal</button>
+            <button type="submit" id="btn-submit-pengeluaran" class="btn btn-primary flex-1">Simpan Pengeluaran</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- TAHAP 5: MODAL TUTUP SHIFT -->
+    <div id="modal-tutup-shift" class="modal-overlay hidden">
+      <div class="modal-card">
+        <h3 class="card-title mb-1">Tutup Shift Kasir</h3>
+        <p class="text-xs text-muted mb-3">Hitung uang fisik di laci dan konfirmasi penutupan shift.</p>
+
+        <div class="card mb-3" style="background-color: var(--bg-input);">
+          <div class="flex-between mb-1">
+            <span class="text-xs text-muted">Modal Awal Laci:</span>
+            <span id="modal-tutup-modal-awal" class="text-xs font-bold">-</span>
+          </div>
+          <div class="flex-between mb-1">
+            <span class="text-xs text-muted">Kas Diharapkan di Laci:</span>
+            <span id="modal-tutup-kas-diharapkan" class="text-xs font-bold text-amber">Rp 0</span>
+          </div>
+          <div class="flex-between pt-1" style="border-top: 1px solid var(--border-color);">
+            <span class="text-xs font-bold">Selisih Kas Laci:</span>
+            <span id="modal-tutup-selisih-badge" class="badge-selisih badge-selisih-pas">Rp 0</span>
+          </div>
+        </div>
+
+        <form id="form-tutup-shift" class="form-vertical" autocomplete="off">
+          <div class="form-group">
+            <label for="input-tutup-kas-aktual">Kas Aktual di Laci (Rp) *</label>
+            <input type="number" id="input-tutup-kas-aktual" class="form-input" min="0" step="1" placeholder="Hitung seluruh uang tunai laci" required>
+            <small class="form-hint">Jumlahkan uang kertas dan logam yang ada di laci saat ini.</small>
+          </div>
+
+          <div id="modal-tutup-warning" class="alert-warning text-xs hidden">
+            ⚠️ Terdapat selisih kas fisik di laci. Pastikan hitungan uang tunai sudah benar.
+          </div>
+
+          <div class="modal-actions mt-2">
+            <button type="button" id="btn-close-modal-tutup" class="btn btn-secondary flex-1">Batal</button>
+            <button type="submit" id="btn-submit-tutup-shift" class="btn btn-primary flex-1">Konfirmasi Tutup</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- TAHAP 5: LAYAR DETAIL SHIFT SELESAI -->
+    <section id="view-shift-detail" class="view hidden">
+      <header class="top-nav">
+        <button type="button" id="btn-back-shift-detail" class="btn btn-secondary btn-sm">← Shift</button>
+        <div class="nav-title">Detail Riwayat Shift</div>
+        <div style="width: 60px;"></div>
+      </header>
+
+      <main class="content-body">
+        <div class="card mb-3">
+          <div class="flex-between mb-1">
+            <span id="detail-shift-status-badge" class="pay-badge pay-badge-paid">Selesai</span>
+            <span id="detail-shift-tanggal" class="text-xs text-muted">-</span>
+          </div>
+          <h2 id="detail-shift-kasir-nama" class="font-bold mb-2">Kasir: -</h2>
+          <div id="detail-shift-jam-rentang" class="text-xs text-muted mb-3">Buka: - • Tutup: -</div>
+
+          <div class="detail-grid mb-3">
+            <div>
+              <div class="text-xs text-muted">Modal Awal</div>
+              <div id="detail-shift-modal-awal" class="font-bold">-</div>
+            </div>
+            <div>
+              <div class="text-xs text-muted">Total Penjualan</div>
+              <div id="detail-shift-total-penjualan" class="font-bold text-amber">-</div>
+            </div>
+            <div>
+              <div class="text-xs text-muted">Kas Diharapkan</div>
+              <div id="detail-shift-kas-diharapkan" class="font-bold">-</div>
+            </div>
+            <div>
+              <div class="text-xs text-muted">Kas Aktual Laci</div>
+              <div id="detail-shift-kas-aktual" class="font-bold">-</div>
+            </div>
+          </div>
+
+          <div class="flex-between pt-2" style="border-top: 1px solid var(--border-color);">
+            <span class="font-bold text-sm">Selisih Kas:</span>
+            <span id="detail-shift-selisih-label" class="badge-selisih badge-selisih-pas">Rp 0</span>
+          </div>
+        </div>
+
+        <!-- RINCIAN ARUS KAS SHIFT -->
+        <div class="card mb-3">
+          <h3 class="card-title mb-2">Rincian Pembayaran & Arus Kas</h3>
+          <div class="detail-grid mb-2">
+            <div>
+              <div class="text-xs text-muted">Tunai Jual</div>
+              <div id="detail-shift-tunai-jual" class="font-bold">-</div>
+            </div>
+            <div>
+              <div class="text-xs text-muted">QRIS Jual</div>
+              <div id="detail-shift-qris-jual" class="font-bold text-muted">-</div>
+            </div>
+            <div>
+              <div class="text-xs text-muted">Bon Penjualan</div>
+              <div id="detail-shift-bon-jual" class="font-bold text-muted">-</div>
+            </div>
+            <div>
+              <div class="text-xs text-muted">Bayar Bon Tunai</div>
+              <div id="detail-shift-bayarbon-tunai" class="font-bold text-success">-</div>
+            </div>
+          </div>
+          <div class="flex-between text-xs pt-2" style="border-top: 1px solid var(--border-color);">
+            <span>Total Pengeluaran Kas:</span>
+            <strong id="detail-shift-total-pengeluaran" class="text-danger">Rp 0</strong>
+          </div>
+        </div>
+
+        <!-- DAFTAR PENGELUARAN SHIFT -->
+        <div class="card mb-3">
+          <h3 class="card-title mb-2">Daftar Pengeluaran Kas</h3>
+          <div id="detail-shift-pengeluaran-list" class="expense-list"></div>
+        </div>
+
+        <!-- DAFTAR TRANSAKSI SHIFT -->
+        <div class="card mb-3">
+          <h3 class="card-title mb-2">Transaksi Penjualan Shift</h3>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Waktu</th>
+                  <th>Nomor</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody id="detail-shift-table-transaksi"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- DAFTAR PEMBAYARAN BON SHIFT -->
+        <div class="card mb-3">
+          <h3 class="card-title mb-2">Cicilan/Pelunasan Bon Masuk</h3>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Waktu</th>
+                  <th>Metode</th>
+                  <th>Nominal</th>
+                </tr>
+              </thead>
+              <tbody id="detail-shift-table-bayarbon"></tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+    </section>
+
+    <!-- TAHAP 5: LAYAR LAPORAN HARIAN (KHUSUS PEMILIK) -->
+    <section id="view-laporan" class="view hidden">
+      <header class="top-nav">
+        <button type="button" id="btn-laporan-back" class="btn btn-secondary btn-sm">← Beranda</button>
+        <div class="nav-title">Laporan Penjualan</div>
+        <div style="width: 60px;"></div>
+      </header>
+
+      <main class="content-body">
+        <div class="card mb-3">
+          <div class="form-group mb-2">
+            <label for="input-laporan-tanggal">Pilih Tanggal Laporan (WIB)</label>
+            <input type="date" id="input-laporan-tanggal" class="form-input">
+          </div>
+          <button type="button" id="btn-share-wa-laporan" class="btn btn-secondary btn-block btn-sm">
+            📲 Bagikan Laporan via WhatsApp
+          </button>
+        </div>
+
+        <!-- KOTAK LAPORAN UTAMA -->
+        <div id="laporan-empty-box" class="card text-center text-muted mb-3 hidden" style="padding: 30px;">
+          Tidak ada transaksi pada tanggal ini.
+        </div>
+
+        <div id="laporan-content-box">
+          <!-- RINGKASAN OMZET -->
+          <div class="card mb-3">
+            <div class="text-xs text-muted mb-1">Penjualan Bersih Hari Ini</div>
+            <div id="laporan-penjualan-bersih" class="report-hero-amount">Rp 0</div>
+
+            <div class="detail-grid mt-2 pt-2" style="border-top: 1px solid var(--border-color);">
+              <div>
+                <div class="text-xs text-muted">Penjualan Kotor</div>
+                <div id="laporan-penjualan-kotor" class="font-bold">-</div>
+              </div>
+              <div>
+                <div class="text-xs text-muted">Total Void</div>
+                <div id="laporan-total-void" class="font-bold text-danger">Rp 0</div>
+              </div>
+              <div>
+                <div class="text-xs text-muted">Jumlah Transaksi</div>
+                <div id="laporan-total-transaksi" class="font-bold">-</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- RINCIAN METODE PEMBAYARAN -->
+          <div class="card mb-3">
+            <h3 class="card-title mb-2">Rincian Pembayaran Penjualan</h3>
+            <div class="flex-between text-xs mb-2">
+              <span>💵 Tunai Terhitung</span>
+              <strong id="laporan-pay-tunai" class="font-bold text-amber">Rp 0</strong>
+            </div>
+            <div class="flex-between text-xs mb-2">
+              <span>📱 QRIS</span>
+              <strong id="laporan-pay-qris" class="font-bold">Rp 0</strong>
+            </div>
+            <div class="flex-between text-xs">
+              <span>📖 Bon / Utang Pelanggan</span>
+              <strong id="laporan-pay-bon" class="font-bold">Rp 0</strong>
+            </div>
+          </div>
+
+          <!-- PENERIMAAN CICILAN BON HARI INI -->
+          <div class="card mb-3">
+            <div class="flex-between mb-1">
+              <h3 class="card-title mb-0">Penerimaan Cicilan/Pelunasan Bon</h3>
+              <span class="badge-cat">Bukan Omzet</span>
+            </div>
+            <p class="text-xs text-muted mb-2">Penerimaan kas/QRIS dari pembayaran bon hari ini (tidak dihitung ganda ke omzet):</p>
+            <div class="flex-between text-xs mb-2">
+              <span>+ Bon Dibayar Tunai</span>
+              <strong id="laporan-bon-tunai" class="text-success font-bold">Rp 0</strong>
+            </div>
+            <div class="flex-between text-xs">
+              <span>+ Bon Dibayar QRIS</span>
+              <strong id="laporan-bon-qris" class="font-bold">Rp 0</strong>
+            </div>
+          </div>
+
+          <!-- 5 PRODUK TERLARIS -->
+          <div class="card mb-3">
+            <h3 class="card-title mb-2">5 Produk Terlaris Hari Ini</h3>
+            <div id="laporan-top-produk-list" class="top-product-list"></div>
+          </div>
+        </div>
+      </main>
+    </section>
+
 
     <!-- LAYAR PRODUK & STOK -->
     <section id="view-produk" class="view hidden">

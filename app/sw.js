@@ -1,10 +1,10 @@
 /**
  * WarungKas - Service Worker Cache-First
  * Menjamin aplikasi bekerja penuh tanpa internet (offline-first)
- * Versi Cache: warungkas-v5
+ * Versi Cache: warungkas-v6
  */
 
-const CACHE_NAME = 'warungkas-v5';
+const CACHE_NAME = 'warungkas-v6';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

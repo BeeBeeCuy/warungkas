@@ -1,8 +1,6 @@
 /**
- * WarungKas - Fondasi Tahap 1 + Tahap 2 (Produk & Stok) + Tahap 3 (Kasir & Pembayaran)
- * Stack: Pure Vanilla JS + IndexedDB (v1) + Web Crypto API (PBKDF2-HMAC-SHA-256)
- * Kode dasar: Gemini 3.8 Flash (AI Studio) — dirakit & ditinjau Muse.
- * Data PRODUK_CONTOH (50 produk) disisipkan Muse dari daftar-produk-contoh.md.
+ * WarungKas - Tahap 6 (Struk, Void Transaksi, Pengembalian Bon, Cadangan & Pemulihan Data)
+ * Stack: Pure Vanilla JS + IndexedDB (v1) + Web Crypto API (PBKDF2 & AES-GCM)
  */
 
 // --- 1. KONFIGURASI & VARIABEL STATE ---
@@ -12,666 +10,66 @@ const PBKDF2_ITERATIONS = 100000;
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 60000;
 
-// Konstanta Array Data Contoh Khas Warung Madura
+// Daftar 16 Object Store Resmi WarungKas
+const ALL_STORES = [
+  'produk', 'satuan_produk', 'pergerakan_stok', 'kasir', 'shift',
+  'transaksi', 'transaksi_item', 'pembayaran_transaksi', 'pelanggan_bon',
+  'bon', 'pembayaran_bon', 'pengeluaran_kas', 'void_transaksi',
+  'void_detail', 'log_aktivitas', 'pengaturan'
+];
+
+// 50 Produk Contoh Khas Warung Madura
 const PRODUK_CONTOH = [
-  {
-    "nama": "Indomie Goreng",
-    "kategori": "Makanan & Camilan",
-    "satuan_dasar": "pcs",
-    "harga_modal": 3000,
-    "harga_jual": 3500,
-    "stok_minimum": 5,
-    "favorit": true,
-    "stok_awal": 40,
-    "satuan_turunan": [
-      {
-        "nama_satuan": "dus",
-        "faktor_konversi": 40,
-        "harga_jual": 112000
-      }
-    ]
-  },
-  {
-    "nama": "Indomie Kuah Ayam Bawang",
-    "kategori": "Makanan & Camilan",
-    "satuan_dasar": "pcs",
-    "harga_modal": 3000,
-    "harga_jual": 3500,
-    "stok_minimum": 5,
-    "favorit": false,
-    "stok_awal": 40,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Mie Sedaap Goreng",
-    "kategori": "Makanan & Camilan",
-    "satuan_dasar": "pcs",
-    "harga_modal": 2900,
-    "harga_jual": 3500,
-    "stok_minimum": 5,
-    "favorit": false,
-    "stok_awal": 40,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Telur Ayam",
-    "kategori": "Sembako",
-    "satuan_dasar": "butir",
-    "harga_modal": 2000,
-    "harga_jual": 2500,
-    "stok_minimum": 10,
-    "favorit": true,
-    "stok_awal": 48,
-    "satuan_turunan": [
-      {
-        "nama_satuan": "kg",
-        "faktor_konversi": 16,
-        "harga_jual": 30000
-      }
-    ]
-  },
-  {
-    "nama": "Beras Medium",
-    "kategori": "Sembako",
-    "satuan_dasar": "gram",
-    "harga_modal": 13,
-    "harga_jual": 14,
-    "stok_minimum": 1000,
-    "favorit": true,
-    "stok_awal": 10000,
-    "satuan_turunan": [
-      {
-        "nama_satuan": "kg",
-        "faktor_konversi": 1000,
-        "harga_jual": 14000
-      },
-      {
-        "nama_satuan": "karung 5 kg",
-        "faktor_konversi": 5000,
-        "harga_jual": 68000
-      },
-      {
-        "nama_satuan": "ecer 500 g",
-        "faktor_konversi": 500,
-        "harga_jual": 7500
-      }
-    ]
-  },
-  {
-    "nama": "Gula Pasir",
-    "kategori": "Sembako",
-    "satuan_dasar": "gram",
-    "harga_modal": 16,
-    "harga_jual": 18,
-    "stok_minimum": 500,
-    "favorit": false,
-    "stok_awal": 5000,
-    "satuan_turunan": [
-      {
-        "nama_satuan": "kg",
-        "faktor_konversi": 1000,
-        "harga_jual": 17500
-      },
-      {
-        "nama_satuan": "ecer 500 g",
-        "faktor_konversi": 500,
-        "harga_jual": 9000
-      }
-    ]
-  },
-  {
-    "nama": "Minyak Goreng 1L (kemasan)",
-    "kategori": "Sembako",
-    "satuan_dasar": "pcs",
-    "harga_modal": 16500,
-    "harga_jual": 18000,
-    "stok_minimum": 3,
-    "favorit": false,
-    "stok_awal": 12,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Minyak Goreng Curah",
-    "kategori": "Sembako",
-    "satuan_dasar": "ml",
-    "harga_modal": 15,
-    "harga_jual": 18,
-    "stok_minimum": 500,
-    "favorit": false,
-    "stok_awal": 5000,
-    "satuan_turunan": [
-      {
-        "nama_satuan": "250 ml",
-        "faktor_konversi": 250,
-        "harga_jual": 5000
-      },
-      {
-        "nama_satuan": "500 ml",
-        "faktor_konversi": 500,
-        "harga_jual": 9500
-      },
-      {
-        "nama_satuan": "1 liter",
-        "faktor_konversi": 1000,
-        "harga_jual": 18000
-      }
-    ]
-  },
-  {
-    "nama": "Garam Dapur 250g",
-    "kategori": "Sembako",
-    "satuan_dasar": "pcs",
-    "harga_modal": 2200,
-    "harga_jual": 3000,
-    "stok_minimum": 5,
-    "favorit": false,
-    "stok_awal": 20,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Kecap Manis Sachet",
-    "kategori": "Sembako",
-    "satuan_dasar": "sachet",
-    "harga_modal": 700,
-    "harga_jual": 1000,
-    "stok_minimum": 10,
-    "favorit": true,
-    "stok_awal": 30,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Saus Sambal Sachet",
-    "kategori": "Sembako",
-    "satuan_dasar": "sachet",
-    "harga_modal": 300,
-    "harga_jual": 500,
-    "stok_minimum": 10,
-    "favorit": false,
-    "stok_awal": 30,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Terasi Sachet",
-    "kategori": "Sembako",
-    "satuan_dasar": "sachet",
-    "harga_modal": 600,
-    "harga_jual": 1000,
-    "stok_minimum": 5,
-    "favorit": false,
-    "stok_awal": 20,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Kopi Kapal Api Sachet",
-    "kategori": "Minuman",
-    "satuan_dasar": "sachet",
-    "harga_modal": 1100,
-    "harga_jual": 1500,
-    "stok_minimum": 10,
-    "favorit": true,
-    "stok_awal": 50,
-    "satuan_turunan": [
-      {
-        "nama_satuan": "renceng",
-        "faktor_konversi": 10,
-        "harga_jual": 13000
-      }
-    ]
-  },
-  {
-    "nama": "Kopi ABC Susu Sachet",
-    "kategori": "Minuman",
-    "satuan_dasar": "sachet",
-    "harga_modal": 1500,
-    "harga_jual": 2000,
-    "stok_minimum": 10,
-    "favorit": false,
-    "stok_awal": 30,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Good Day Sachet",
-    "kategori": "Minuman",
-    "satuan_dasar": "sachet",
-    "harga_modal": 1600,
-    "harga_jual": 2000,
-    "stok_minimum": 10,
-    "favorit": false,
-    "stok_awal": 30,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Susu Kental Manis Sachet",
-    "kategori": "Minuman",
-    "satuan_dasar": "sachet",
-    "harga_modal": 1100,
-    "harga_jual": 1500,
-    "stok_minimum": 10,
-    "favorit": false,
-    "stok_awal": 30,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Energen Sachet",
-    "kategori": "Minuman",
-    "satuan_dasar": "sachet",
-    "harga_modal": 1600,
-    "harga_jual": 2000,
-    "stok_minimum": 10,
-    "favorit": false,
-    "stok_awal": 30,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Nutrisari Sachet",
-    "kategori": "Minuman",
-    "satuan_dasar": "sachet",
-    "harga_modal": 1000,
-    "harga_jual": 1500,
-    "stok_minimum": 10,
-    "favorit": false,
-    "stok_awal": 30,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Teh Celup Sariwangi (isi 25)",
-    "kategori": "Minuman",
-    "satuan_dasar": "pcs",
-    "harga_modal": 5000,
-    "harga_jual": 6000,
-    "stok_minimum": 3,
-    "favorit": false,
-    "stok_awal": 10,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Aqua Gelas 240ml",
-    "kategori": "Minuman",
-    "satuan_dasar": "pcs",
-    "harga_modal": 750,
-    "harga_jual": 1000,
-    "stok_minimum": 24,
-    "favorit": true,
-    "stok_awal": 48,
-    "satuan_turunan": [
-      {
-        "nama_satuan": "dus",
-        "faktor_konversi": 48,
-        "harga_jual": 38000
-      }
-    ]
-  },
-  {
-    "nama": "Aqua Botol 600ml",
-    "kategori": "Minuman",
-    "satuan_dasar": "pcs",
-    "harga_modal": 2800,
-    "harga_jual": 3500,
-    "stok_minimum": 6,
-    "favorit": false,
-    "stok_awal": 24,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Teh Botol Sosro 450ml",
-    "kategori": "Minuman",
-    "satuan_dasar": "pcs",
-    "harga_modal": 3300,
-    "harga_jual": 4000,
-    "stok_minimum": 6,
-    "favorit": false,
-    "stok_awal": 24,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Kopi Botol (Kopiko/ABC)",
-    "kategori": "Minuman",
-    "satuan_dasar": "pcs",
-    "harga_modal": 3800,
-    "harga_jual": 4500,
-    "stok_minimum": 6,
-    "favorit": false,
-    "stok_awal": 24,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Minuman Soda Kaleng",
-    "kategori": "Minuman",
-    "satuan_dasar": "pcs",
-    "harga_modal": 5000,
-    "harga_jual": 6000,
-    "stok_minimum": 6,
-    "favorit": false,
-    "stok_awal": 12,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Rokok Sampoerna Mild 16",
-    "kategori": "Rokok",
-    "satuan_dasar": "batang",
-    "harga_modal": 2063,
-    "harga_jual": 2500,
-    "stok_minimum": 16,
-    "favorit": true,
-    "stok_awal": 160,
-    "satuan_turunan": [
-      {
-        "nama_satuan": "bungkus",
-        "faktor_konversi": 16,
-        "harga_jual": 36000
-      }
-    ]
-  },
-  {
-    "nama": "Rokok Djarum Super 12",
-    "kategori": "Rokok",
-    "satuan_dasar": "batang",
-    "harga_modal": 1708,
-    "harga_jual": 2000,
-    "stok_minimum": 12,
-    "favorit": true,
-    "stok_awal": 120,
-    "satuan_turunan": [
-      {
-        "nama_satuan": "bungkus",
-        "faktor_konversi": 12,
-        "harga_jual": 23000
-      }
-    ]
-  },
-  {
-    "nama": "Rokok Gudang Garam Filter 12",
-    "kategori": "Rokok",
-    "satuan_dasar": "batang",
-    "harga_modal": 1792,
-    "harga_jual": 2000,
-    "stok_minimum": 12,
-    "favorit": false,
-    "stok_awal": 120,
-    "satuan_turunan": [
-      {
-        "nama_satuan": "bungkus",
-        "faktor_konversi": 12,
-        "harga_jual": 24000
-      }
-    ]
-  },
-  {
-    "nama": "Rokok LA Lights 16",
-    "kategori": "Rokok",
-    "satuan_dasar": "batang",
-    "harga_modal": 2000,
-    "harga_jual": 2500,
-    "stok_minimum": 16,
-    "favorit": false,
-    "stok_awal": 160,
-    "satuan_turunan": [
-      {
-        "nama_satuan": "bungkus",
-        "faktor_konversi": 16,
-        "harga_jual": 35000
-      }
-    ]
-  },
-  {
-    "nama": "Korek Api Gas",
-    "kategori": "Rokok",
-    "satuan_dasar": "pcs",
-    "harga_modal": 1800,
-    "harga_jual": 2500,
-    "stok_minimum": 5,
-    "favorit": false,
-    "stok_awal": 20,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Roti Aoka",
-    "kategori": "Makanan & Camilan",
-    "satuan_dasar": "pcs",
-    "harga_modal": 2300,
-    "harga_jual": 3000,
-    "stok_minimum": 5,
-    "favorit": false,
-    "stok_awal": 20,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Chitato 68g",
-    "kategori": "Makanan & Camilan",
-    "satuan_dasar": "pcs",
-    "harga_modal": 9500,
-    "harga_jual": 11000,
-    "stok_minimum": 4,
-    "favorit": false,
-    "stok_awal": 12,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Taro Snack",
-    "kategori": "Makanan & Camilan",
-    "satuan_dasar": "pcs",
-    "harga_modal": 5500,
-    "harga_jual": 6500,
-    "stok_minimum": 4,
-    "favorit": false,
-    "stok_awal": 12,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Biskuit Roma Kelapa",
-    "kategori": "Makanan & Camilan",
-    "satuan_dasar": "pcs",
-    "harga_modal": 6800,
-    "harga_jual": 8000,
-    "stok_minimum": 4,
-    "favorit": false,
-    "stok_awal": 12,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Permen Kopiko (per pcs)",
-    "kategori": "Makanan & Camilan",
-    "satuan_dasar": "pcs",
-    "harga_modal": 300,
-    "harga_jual": 500,
-    "stok_minimum": 20,
-    "favorit": false,
-    "stok_awal": 50,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Sabun Mandi Batang",
-    "kategori": "Kebutuhan Rumah",
-    "satuan_dasar": "pcs",
-    "harga_modal": 3200,
-    "harga_jual": 4000,
-    "stok_minimum": 5,
-    "favorit": false,
-    "stok_awal": 15,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Shampo Sachet",
-    "kategori": "Kebutuhan Rumah",
-    "satuan_dasar": "sachet",
-    "harga_modal": 700,
-    "harga_jual": 1000,
-    "stok_minimum": 10,
-    "favorit": false,
-    "stok_awal": 30,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Pasta Gigi 75g",
-    "kategori": "Kebutuhan Rumah",
-    "satuan_dasar": "pcs",
-    "harga_modal": 5400,
-    "harga_jual": 6500,
-    "stok_minimum": 3,
-    "favorit": false,
-    "stok_awal": 10,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Deterjen Sachet",
-    "kategori": "Kebutuhan Rumah",
-    "satuan_dasar": "sachet",
-    "harga_modal": 750,
-    "harga_jual": 1000,
-    "stok_minimum": 10,
-    "favorit": false,
-    "stok_awal": 30,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Sabun Cuci Piring Sachet",
-    "kategori": "Kebutuhan Rumah",
-    "satuan_dasar": "sachet",
-    "harga_modal": 700,
-    "harga_jual": 1000,
-    "stok_minimum": 10,
-    "favorit": false,
-    "stok_awal": 30,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Tisu Paseo 250 sheet",
-    "kategori": "Kebutuhan Rumah",
-    "satuan_dasar": "pcs",
-    "harga_modal": 9200,
-    "harga_jual": 11000,
-    "stok_minimum": 3,
-    "favorit": false,
-    "stok_awal": 10,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Paracetamol Strip (10 tablet)",
-    "kategori": "Lainnya",
-    "satuan_dasar": "tablet",
-    "harga_modal": 280,
-    "harga_jual": 500,
-    "stok_minimum": 10,
-    "favorit": false,
-    "stok_awal": 50,
-    "satuan_turunan": [
-      {
-        "nama_satuan": "strip",
-        "faktor_konversi": 10,
-        "harga_jual": 4000
-      }
-    ]
-  },
-  {
-    "nama": "Obat Batuk Sachet",
-    "kategori": "Lainnya",
-    "satuan_dasar": "sachet",
-    "harga_modal": 1800,
-    "harga_jual": 2500,
-    "stok_minimum": 5,
-    "favorit": false,
-    "stok_awal": 20,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Minyak Kayu Putih 60ml",
-    "kategori": "Lainnya",
-    "satuan_dasar": "pcs",
-    "harga_modal": 13500,
-    "harga_jual": 16000,
-    "stok_minimum": 2,
-    "favorit": false,
-    "stok_awal": 8,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Bensin Eceran 1 Liter",
-    "kategori": "Lainnya",
-    "satuan_dasar": "ml",
-    "harga_modal": 11,
-    "harga_jual": 13,
-    "stok_minimum": 1000,
-    "favorit": true,
-    "stok_awal": 10000,
-    "satuan_turunan": [
-      {
-        "nama_satuan": "1 liter",
-        "faktor_konversi": 1000,
-        "harga_jual": 13000
-      },
-      {
-        "nama_satuan": "500 ml",
-        "faktor_konversi": 500,
-        "harga_jual": 7000
-      }
-    ]
-  },
-  {
-    "nama": "Gas LPG 3kg (isi ulang/tukar)",
-    "kategori": "Lainnya",
-    "satuan_dasar": "pcs",
-    "harga_modal": 19000,
-    "harga_jual": 22000,
-    "stok_minimum": 2,
-    "favorit": false,
-    "stok_awal": 5,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Air Galon Isi Ulang 19L",
-    "kategori": "Lainnya",
-    "satuan_dasar": "pcs",
-    "harga_modal": 4000,
-    "harga_jual": 6000,
-    "stok_minimum": 3,
-    "favorit": false,
-    "stok_awal": 10,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Pulsa Reguler 5.000 (semua operator)",
-    "kategori": "Pulsa & Token",
-    "satuan_dasar": "pcs",
-    "harga_modal": 6800,
-    "harga_jual": 7500,
-    "stok_minimum": 0,
-    "favorit": false,
-    "stok_awal": 100,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Pulsa Reguler 10.000",
-    "kategori": "Pulsa & Token",
-    "satuan_dasar": "pcs",
-    "harga_modal": 11300,
-    "harga_jual": 12500,
-    "stok_minimum": 0,
-    "favorit": false,
-    "stok_awal": 100,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Token Listrik 20.000",
-    "kategori": "Pulsa & Token",
-    "satuan_dasar": "pcs",
-    "harga_modal": 21000,
-    "harga_jual": 22500,
-    "stok_minimum": 0,
-    "favorit": false,
-    "stok_awal": 100,
-    "satuan_turunan": []
-  },
-  {
-    "nama": "Token Listrik 50.000",
-    "kategori": "Pulsa & Token",
-    "satuan_dasar": "pcs",
-    "harga_modal": 50500,
-    "harga_jual": 52500,
-    "stok_minimum": 0,
-    "favorit": false,
-    "stok_awal": 100,
-    "satuan_turunan": []
-  }
+  { "nama": "Indomie Goreng", "kategori": "Makanan & Camilan", "satuan_dasar": "pcs", "harga_modal": 3000, "harga_jual": 3500, "stok_minimum": 5, "favorit": true, "stok_awal": 40, "satuan_turunan": [{ "nama_satuan": "dus", "faktor_konversi": 40, "harga_jual": 112000 }] },
+  { "nama": "Indomie Kuah Ayam Bawang", "kategori": "Makanan & Camilan", "satuan_dasar": "pcs", "harga_modal": 3000, "harga_jual": 3500, "stok_minimum": 5, "favorit": false, "stok_awal": 40, "satuan_turunan": [] },
+  { "nama": "Mie Sedaap Goreng", "kategori": "Makanan & Camilan", "satuan_dasar": "pcs", "harga_modal": 2900, "harga_jual": 3500, "stok_minimum": 5, "favorit": false, "stok_awal": 40, "satuan_turunan": [] },
+  { "nama": "Telur Ayam", "kategori": "Sembako", "satuan_dasar": "butir", "harga_modal": 2000, "harga_jual": 2500, "stok_minimum": 10, "favorit": true, "stok_awal": 48, "satuan_turunan": [{ "nama_satuan": "kg", "faktor_konversi": 16, "harga_jual": 30000 }] },
+  { "nama": "Beras Medium", "kategori": "Sembako", "satuan_dasar": "gram", "harga_modal": 13, "harga_jual": 14, "stok_minimum": 1000, "favorit": true, "stok_awal": 10000, "satuan_turunan": [{ "nama_satuan": "kg", "faktor_konversi": 1000, "harga_jual": 14000 }, { "nama_satuan": "karung 5 kg", "faktor_konversi": 5000, "harga_jual": 68000 }, { "nama_satuan": "ecer 500 g", "faktor_konversi": 500, "harga_jual": 7500 }] },
+  { "nama": "Gula Pasir", "kategori": "Sembako", "satuan_dasar": "gram", "harga_modal": 16, "harga_jual": 18, "stok_minimum": 500, "favorit": false, "stok_awal": 5000, "satuan_turunan": [{ "nama_satuan": "kg", "faktor_konversi": 1000, "harga_jual": 17500 }, { "nama_satuan": "ecer 500 g", "faktor_konversi": 500, "harga_jual": 9000 }] },
+  { "nama": "Minyak Goreng 1L (kemasan)", "kategori": "Sembako", "satuan_dasar": "pcs", "harga_modal": 16500, "harga_jual": 18000, "stok_minimum": 3, "favorit": false, "stok_awal": 12, "satuan_turunan": [] },
+  { "nama": "Minyak Goreng Curah", "kategori": "Sembako", "satuan_dasar": "ml", "harga_modal": 15, "harga_jual": 18, "stok_minimum": 500, "favorit": false, "stok_awal": 5000, "satuan_turunan": [{ "nama_satuan": "250 ml", "faktor_konversi": 250, "harga_jual": 5000 }, { "nama_satuan": "500 ml", "faktor_konversi": 500, "harga_jual": 9500 }, { "nama_satuan": "1 liter", "faktor_konversi": 1000, "harga_jual": 18000 }] },
+  { "nama": "Garam Dapur 250g", "kategori": "Sembako", "satuan_dasar": "pcs", "harga_modal": 2200, "harga_jual": 3000, "stok_minimum": 5, "favorit": false, "stok_awal": 20, "satuan_turunan": [] },
+  { "nama": "Kecap Manis Sachet", "kategori": "Sembako", "satuan_dasar": "sachet", "harga_modal": 700, "harga_jual": 1000, "stok_minimum": 10, "favorit": true, "stok_awal": 30, "satuan_turunan": [] },
+  { "nama": "Saus Sambal Sachet", "kategori": "Sembako", "satuan_dasar": "sachet", "harga_modal": 300, "harga_jual": 500, "stok_minimum": 10, "favorit": false, "stok_awal": 30, "satuan_turunan": [] },
+  { "nama": "Terasi Sachet", "kategori": "Sembako", "satuan_dasar": "sachet", "harga_modal": 600, "harga_jual": 1000, "stok_minimum": 5, "favorit": false, "stok_awal": 20, "satuan_turunan": [] },
+  { "nama": "Kopi Kapal Api Sachet", "kategori": "Minuman", "satuan_dasar": "sachet", "harga_modal": 1100, "harga_jual": 1500, "stok_minimum": 10, "favorit": true, "stok_awal": 50, "satuan_turunan": [{ "nama_satuan": "renceng", "faktor_konversi": 10, "harga_jual": 13000 }] },
+  { "nama": "Kopi ABC Susu Sachet", "kategori": "Minuman", "satuan_dasar": "sachet", "harga_modal": 1500, "harga_jual": 2000, "stok_minimum": 10, "favorit": false, "stok_awal": 30, "satuan_turunan": [] },
+  { "nama": "Good Day Sachet", "kategori": "Minuman", "satuan_dasar": "sachet", "harga_modal": 1600, "harga_jual": 2000, "stok_minimum": 10, "favorit": false, "stok_awal": 30, "satuan_turunan": [] },
+  { "nama": "Susu Kental Manis Sachet", "kategori": "Minuman", "satuan_dasar": "sachet", "harga_modal": 1100, "harga_jual": 1500, "stok_minimum": 10, "favorit": false, "stok_awal": 30, "satuan_turunan": [] },
+  { "nama": "Energen Sachet", "kategori": "Minuman", "satuan_dasar": "sachet", "harga_modal": 1600, "harga_jual": 2000, "stok_minimum": 10, "favorit": false, "stok_awal": 30, "satuan_turunan": [] },
+  { "nama": "Nutrisari Sachet", "kategori": "Minuman", "satuan_dasar": "sachet", "harga_modal": 1000, "harga_jual": 1500, "stok_minimum": 10, "favorit": false, "stok_awal": 30, "satuan_turunan": [] },
+  { "nama": "Teh Celup Sariwangi (isi 25)", "kategori": "Minuman", "satuan_dasar": "pcs", "harga_modal": 5000, "harga_jual": 6000, "stok_minimum": 3, "favorit": false, "stok_awal": 10, "satuan_turunan": [] },
+  { "nama": "Aqua Gelas 240ml", "kategori": "Minuman", "satuan_dasar": "pcs", "harga_modal": 750, "harga_jual": 1000, "stok_minimum": 24, "favorit": true, "stok_awal": 48, "satuan_turunan": [{ "nama_satuan": "dus", "faktor_konversi": 48, "harga_jual": 38000 }] },
+  { "nama": "Aqua Botol 600ml", "kategori": "Minuman", "satuan_dasar": "pcs", "harga_modal": 2800, "harga_jual": 3500, "stok_minimum": 6, "favorit": false, "stok_awal": 24, "satuan_turunan": [] },
+  { "nama": "Teh Botol Sosro 450ml", "kategori": "Minuman", "satuan_dasar": "pcs", "harga_modal": 3300, "harga_jual": 4000, "stok_minimum": 6, "favorit": false, "stok_awal": 24, "satuan_turunan": [] },
+  { "nama": "Kopi Botol (Kopiko/ABC)", "kategori": "Minuman", "satuan_dasar": "pcs", "harga_modal": 3800, "harga_jual": 4500, "stok_minimum": 6, "favorit": false, "stok_awal": 24, "satuan_turunan": [] },
+  { "nama": "Minuman Soda Kaleng", "kategori": "Minuman", "satuan_dasar": "pcs", "harga_modal": 5000, "harga_jual": 6000, "stok_minimum": 6, "favorit": false, "stok_awal": 12, "satuan_turunan": [] },
+  { "nama": "Rokok Sampoerna Mild 16", "kategori": "Rokok", "satuan_dasar": "batang", "harga_modal": 2063, "harga_jual": 2500, "stok_minimum": 16, "favorit": true, "stok_awal": 160, "satuan_turunan": [{ "nama_satuan": "bungkus", "faktor_konversi": 16, "harga_jual": 36000 }] },
+  { "nama": "Rokok Djarum Super 12", "kategori": "Rokok", "satuan_dasar": "batang", "harga_modal": 1708, "harga_jual": 2000, "stok_minimum": 12, "favorit": true, "stok_awal": 120, "satuan_turunan": [{ "nama_satuan": "bungkus", "faktor_konversi": 12, "harga_jual": 23000 }] },
+  { "nama": "Rokok Gudang Garam Filter 12", "kategori": "Rokok", "satuan_dasar": "batang", "harga_modal": 1792, "harga_jual": 2000, "stok_minimum": 12, "favorit": false, "stok_awal": 120, "satuan_turunan": [{ "nama_satuan": "bungkus", "faktor_konversi": 12, "harga_jual": 24000 }] },
+  { "nama": "Rokok LA Lights 16", "kategori": "Rokok", "satuan_dasar": "batang", "harga_modal": 2000, "harga_jual": 2500, "stok_minimum": 16, "favorit": false, "stok_awal": 160, "satuan_turunan": [{ "nama_satuan": "bungkus", "faktor_konversi": 16, "harga_jual": 35000 }] },
+  { "nama": "Korek Api Gas", "kategori": "Rokok", "satuan_dasar": "pcs", "harga_modal": 1800, "harga_jual": 2500, "stok_minimum": 5, "favorit": false, "stok_awal": 20, "satuan_turunan": [] },
+  { "nama": "Roti Aoka", "kategori": "Makanan & Camilan", "satuan_dasar": "pcs", "harga_modal": 2300, "harga_jual": 3000, "stok_minimum": 5, "favorit": false, "stok_awal": 20, "satuan_turunan": [] },
+  { "nama": "Chitato 68g", "kategori": "Makanan & Camilan", "satuan_dasar": "pcs", "harga_modal": 9500, "harga_jual": 11000, "stok_minimum": 4, "favorit": false, "stok_awal": 12, "satuan_turunan": [] },
+  { "nama": "Taro Snack", "kategori": "Makanan & Camilan", "satuan_dasar": "pcs", "harga_modal": 5500, "harga_jual": 6500, "stok_minimum": 4, "favorit": false, "stok_awal": 12, "satuan_turunan": [] },
+  { "nama": "Biskuit Roma Kelapa", "kategori": "Makanan & Camilan", "satuan_dasar": "pcs", "harga_modal": 6800, "harga_jual": 8000, "stok_minimum": 4, "favorit": false, "stok_awal": 12, "satuan_turunan": [] },
+  { "nama": "Permen Kopiko (per pcs)", "kategori": "Makanan & Camilan", "satuan_dasar": "pcs", "harga_modal": 300, "harga_jual": 500, "stok_minimum": 20, "favorit": false, "stok_awal": 50, "satuan_turunan": [] },
+  { "nama": "Sabun Mandi Batang", "kategori": "Kebutuhan Rumah", "satuan_dasar": "pcs", "harga_modal": 3200, "harga_jual": 4000, "stok_minimum": 5, "favorit": false, "stok_awal": 15, "satuan_turunan": [] },
+  { "nama": "Shampo Sachet", "kategori": "Kebutuhan Rumah", "satuan_dasar": "sachet", "harga_modal": 700, "harga_jual": 1000, "stok_minimum": 10, "favorit": false, "stok_awal": 30, "satuan_turunan": [] },
+  { "nama": "Pasta Gigi 75g", "kategori": "Kebutuhan Rumah", "satuan_dasar": "pcs", "harga_modal": 5400, "harga_jual": 6500, "stok_minimum": 3, "favorit": false, "stok_awal": 10, "satuan_turunan": [] },
+  { "nama": "Deterjen Sachet", "kategori": "Kebutuhan Rumah", "satuan_dasar": "sachet", "harga_modal": 750, "harga_jual": 1000, "stok_minimum": 10, "favorit": false, "stok_awal": 30, "satuan_turunan": [] },
+  { "nama": "Sabun Cuci Piring Sachet", "kategori": "Kebutuhan Rumah", "satuan_dasar": "sachet", "harga_modal": 700, "harga_jual": 1000, "stok_minimum": 10, "favorit": false, "stok_awal": 30, "satuan_turunan": [] },
+  { "nama": "Tisu Paseo 250 sheet", "kategori": "Kebutuhan Rumah", "satuan_dasar": "pcs", "harga_modal": 9200, "harga_jual": 11000, "stok_minimum": 3, "favorit": false, "stok_awal": 10, "satuan_turunan": [] },
+  { "nama": "Paracetamol Strip (10 tablet)", "kategori": "Lainnya", "satuan_dasar": "tablet", "harga_modal": 280, "harga_jual": 500, "stok_minimum": 10, "favorit": false, "stok_awal": 50, "satuan_turunan": [{ "nama_satuan": "strip", "faktor_konversi": 10, "harga_jual": 4000 }] },
+  { "nama": "Obat Batuk Sachet", "kategori": "Lainnya", "satuan_dasar": "sachet", "harga_modal": 1800, "harga_jual": 2500, "stok_minimum": 5, "favorit": false, "stok_awal": 20, "satuan_turunan": [] },
+  { "nama": "Minyak Kayu Putih 60ml", "kategori": "Lainnya", "satuan_dasar": "pcs", "harga_modal": 13500, "harga_jual": 16000, "stok_minimum": 2, "favorit": false, "stok_awal": 8, "satuan_turunan": [] },
+  { "nama": "Bensin Eceran 1 Liter", "kategori": "Lainnya", "satuan_dasar": "ml", "harga_modal": 11, "harga_jual": 13, "stok_minimum": 1000, "favorit": true, "stok_awal": 10000, "satuan_turunan": [{ "nama_satuan": "1 liter", "faktor_konversi": 1000, "harga_jual": 13000 }, { "nama_satuan": "500 ml", "faktor_konversi": 500, "harga_jual": 7000 }] },
+  { "nama": "Gas LPG 3kg (isi ulang/tukar)", "kategori": "Lainnya", "satuan_dasar": "pcs", "harga_modal": 19000, "harga_jual": 22000, "stok_minimum": 2, "favorit": false, "stok_awal": 5, "satuan_turunan": [] },
+  { "nama": "Air Galon Isi Ulang 19L", "kategori": "Lainnya", "satuan_dasar": "pcs", "harga_modal": 4000, "harga_jual": 6000, "stok_minimum": 3, "favorit": false, "stok_awal": 10, "satuan_turunan": [] },
+  { "nama": "Pulsa Reguler 5.000 (semua operator)", "kategori": "Pulsa & Token", "satuan_dasar": "pcs", "harga_modal": 6800, "harga_jual": 7500, "stok_minimum": 0, "favorit": false, "stok_awal": 100, "satuan_turunan": [] },
+  { "nama": "Pulsa Reguler 10.000", "kategori": "Pulsa & Token", "satuan_dasar": "pcs", "harga_modal": 11300, "harga_jual": 12500, "stok_minimum": 0, "favorit": false, "stok_awal": 100, "satuan_turunan": [] },
+  { "nama": "Token Listrik 20.000", "kategori": "Pulsa & Token", "satuan_dasar": "pcs", "harga_modal": 21000, "harga_jual": 22500, "stok_minimum": 0, "favorit": false, "stok_awal": 100, "satuan_turunan": [] },
+  { "nama": "Token Listrik 50.000", "kategori": "Pulsa & Token", "satuan_dasar": "pcs", "harga_modal": 50500, "harga_jual": 52500, "stok_minimum": 0, "favorit": false, "stok_awal": 100, "satuan_turunan": [] }
 ];
 
 let dbInstance = null;
@@ -679,7 +77,7 @@ let currentUser = null;
 let currentEnteredPin = '';
 let lockoutTimerInterval = null;
 
-// Cache Data Memori untuk Kecepatan Pencarian <300ms
+// Cache Memori
 let cachedActiveProducts = [];
 let cachedStockMap = {};
 let cachedUnitsMap = {};
@@ -688,22 +86,28 @@ let currentSearchKeyword = '';
 let activeDetailProductId = null;
 let currentShift = null;
 
-// State Kasir & Keranjang (Tahap 3)
+// State Kasir & Keranjang
 let currentKasirKat = 'SEMUA';
 let currentKasirSearch = '';
-let cartItems = []; // Array of snapshot objects
+let cartItems = [];
 let activePickerProduct = null;
-let selectedPickerUnit = null; // null = satuan dasar
+let selectedPickerUnit = null;
 
-// State Buku Bon (Tahap 4)
+// State Buku Bon
 let cachedBonCustomers = [];
 let currentBonSearch = '';
 let activeBonCustomerId = null;
 let activePayingBonId = null;
-// State Shift & Laporan (Tahap 5)
+let activeRefundBonId = null;
+
+// State Shift & Laporan
 let activeShiftCalculation = null;
 let activeDetailShiftId = null;
 
+// State Struk & Void
+let activeReceiptData = null;
+let activeVoidTargetTrx = null;
+let pendingImportData = null;
 
 // --- 2. HELPER UTILITAS UMUM ---
 function generateUUID() {
@@ -736,7 +140,24 @@ function hexToBuf(hexString) {
   return bytes.buffer;
 }
 
-// Tanggal zona Asia/Jakarta format YYYYMMDD
+function bufToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+function base64ToBuf(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
 function getJakartaDateKey() {
   const d = new Date();
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -752,9 +173,6 @@ function getJakartaDateKey() {
   return `${y}${m}${day}`;
 }
 
-
-
-// Tanggal zona Asia/Jakarta format YYYY-MM-DD untuk tanggal tertentu (Tahap 5)
 function getJakartaISODateString(dateObj = new Date()) {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Jakarta',
@@ -769,7 +187,27 @@ function getJakartaISODateString(dateObj = new Date()) {
   return `${y}-${m}-${day}`;
 }
 
-// Normalisasi no hp ke format 62xxx
+function formatTanggalWIB(isoString) {
+  if (!isoString) return '-';
+  const d = new Date(isoString);
+  return d.toLocaleDateString('id-ID', {
+    timeZone: 'Asia/Jakarta',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  });
+}
+
+function formatJamWIB(isoString) {
+  if (!isoString) return '-';
+  const d = new Date(isoString);
+  return d.toLocaleTimeString('id-ID', {
+    timeZone: 'Asia/Jakarta',
+    hour: '2-digit',
+    minute: '2-digit'
+  }) + ' WIB';
+}
+
 function normalizePhoneForWA(phone) {
   if (!phone) return '';
   let clean = phone.replace(/[^0-9]/g, '');
@@ -779,7 +217,18 @@ function normalizePhoneForWA(phone) {
   return clean;
 }
 
-// --- 3. KRIPTOGRAFI (PBKDF2-HMAC-SHA-256) ---
+function downloadFile(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// --- 3. KRIPTOGRAFI (PBKDF2-HMAC-SHA-256 & AES-GCM) ---
 async function hashPin(pin, existingSaltHex = null) {
   const enc = new TextEncoder();
   const salt = existingSaltHex
@@ -839,32 +288,57 @@ async function verifyPin(pin, storedHash, storedSalt, storedIterations) {
   return bufToHex(derivedBits) === storedHash;
 }
 
-// --- 4. INISIALISASI INDEXEDDB (SKEMA PRD v1.2 + AMENDEMEN v1.3 - TETAP VERSI 1) ---
+// Kalibrasi iterasi PBKDF2 untuk ekspor terenkripsi (target 250ms–1000ms, min 100.000)
+async function calibrateIterations() {
+  const enc = new TextEncoder();
+  const dummyPass = enc.encode('benchmark-pass-123');
+  const dummySalt = crypto.getRandomValues(new Uint8Array(16));
+  const testIterations = 50000;
+
+  const keyMaterial = await crypto.subtle.importKey('raw', dummyPass, { name: 'PBKDF2' }, false, ['deriveKey']);
+  const t0 = performance.now();
+  await crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: dummySalt, iterations: testIterations, hash: 'SHA-256' },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt']
+  );
+  const elapsed = performance.now() - t0;
+  const timePerIteration = elapsed / testIterations;
+  let targetIterations = Math.round(350 / (timePerIteration || 0.002));
+  if (targetIterations < 100000) targetIterations = 100000;
+  return targetIterations;
+}
+
+async function deriveAesKey(password, saltBuffer, iterations) {
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), { name: 'PBKDF2' }, false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: saltBuffer, iterations: iterations, hash: 'SHA-256' },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+// --- 4. INISIALISASI INDEXEDDB (16 OBJECT STORE - DB_VERSION 1) ---
 function openDatabase() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
-
     request.onerror = (e) => reject(e.target.error);
 
     request.onupgradeneeded = (e) => {
       const db = e.target.result;
-
-      if (!db.objectStoreNames.contains('produk')) {
-        db.createObjectStore('produk', { keyPath: 'id' });
-      }
-      if (!db.objectStoreNames.contains('satuan_produk')) {
-        db.createObjectStore('satuan_produk', { keyPath: 'id' });
-      }
+      if (!db.objectStoreNames.contains('produk')) db.createObjectStore('produk', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('satuan_produk')) db.createObjectStore('satuan_produk', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('pergerakan_stok')) {
         const os = db.createObjectStore('pergerakan_stok', { keyPath: 'id' });
         os.createIndex('produk_id', 'produk_id', { unique: false });
       }
-      if (!db.objectStoreNames.contains('kasir')) {
-        db.createObjectStore('kasir', { keyPath: 'id' });
-      }
-      if (!db.objectStoreNames.contains('shift')) {
-        db.createObjectStore('shift', { keyPath: 'id' });
-      }
+      if (!db.objectStoreNames.contains('kasir')) db.createObjectStore('kasir', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('shift')) db.createObjectStore('shift', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('transaksi')) {
         const os = db.createObjectStore('transaksi', { keyPath: 'id' });
         os.createIndex('shift_id', 'shift_id', { unique: false });
@@ -878,9 +352,7 @@ function openDatabase() {
         const os = db.createObjectStore('pembayaran_transaksi', { keyPath: 'id' });
         os.createIndex('transaksi_id', 'transaksi_id', { unique: false });
       }
-      if (!db.objectStoreNames.contains('pelanggan_bon')) {
-        db.createObjectStore('pelanggan_bon', { keyPath: 'id' });
-      }
+      if (!db.objectStoreNames.contains('pelanggan_bon')) db.createObjectStore('pelanggan_bon', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('bon')) {
         const os = db.createObjectStore('bon', { keyPath: 'id' });
         os.createIndex('pelanggan_id', 'pelanggan_id', { unique: false });
@@ -906,9 +378,7 @@ function openDatabase() {
         const os = db.createObjectStore('log_aktivitas', { keyPath: 'id' });
         os.createIndex('waktu', 'waktu', { unique: false });
       }
-      if (!db.objectStoreNames.contains('pengaturan')) {
-        db.createObjectStore('pengaturan', { keyPath: 'kunci' });
-      }
+      if (!db.objectStoreNames.contains('pengaturan')) db.createObjectStore('pengaturan', { keyPath: 'kunci' });
     };
 
     request.onsuccess = (e) => resolve(e.target.result);
@@ -936,7 +406,7 @@ async function catatLog(penggunaId, aksi, objek, detail) {
   });
 }
 
-// --- 6. OPERASI DATABASE HELPER ---
+// --- 6. OPERASI DATABASE HELPER UMUM ---
 function getPengaturan(kunci) {
   return new Promise((resolve, reject) => {
     const tx = dbInstance.transaction(['pengaturan'], 'readonly');
@@ -1008,7 +478,6 @@ function getRecentLogs(limit = 20) {
   });
 }
 
-// --- HELPER STORE PRODUK, SATUAN & STOK ---
 function getAllProducts() {
   return new Promise((resolve, reject) => {
     const tx = dbInstance.transaction(['produk'], 'readonly');
@@ -1067,7 +536,6 @@ function getMovementsByProductId(productId) {
     const req = index.getAll(productId);
     req.onsuccess = () => {
       const list = req.result || [];
-      // Urutkan waktu ascending untuk hitung saldo
       list.sort((a, b) => new Date(a.waktu) - new Date(b.waktu));
       resolve(list);
     };
@@ -1075,7 +543,6 @@ function getMovementsByProductId(productId) {
   });
 }
 
-// Menghitung saldo stok saat ini = Σ seluruh pergerakan stok produk itu
 async function getCalculatedStock(productId) {
   const movements = await getMovementsByProductId(productId);
   let total = 0;
@@ -1085,7 +552,6 @@ async function getCalculatedStock(productId) {
   return Math.round(total);
 }
 
-// Menulis pergerakan stok baru dengan validasi saldo_sesudah
 async function catatPergerakanStok(productId, jenis, jumlahBertanda, keterangan, userId) {
   const currentSaldo = await getCalculatedStock(productId);
   const intJumlah = Math.round(Number(jumlahBertanda));
@@ -1094,7 +560,7 @@ async function catatPergerakanStok(productId, jenis, jumlahBertanda, keterangan,
   const movementRecord = {
     id: generateUUID(),
     produk_id: productId,
-    jenis: jenis, // MASUK_KULAKAN | JUAL | VOID_JUAL | RUSAK | KOREKSI
+    jenis: jenis,
     jumlah: intJumlah,
     saldo_sesudah: saldoSesudah,
     pengguna_id: userId || (currentUser ? currentUser.id : 'sistem'),
@@ -1111,7 +577,6 @@ async function catatPergerakanStok(productId, jenis, jumlahBertanda, keterangan,
   });
 }
 
-// --- HELPER SHIFT & PELANGGAN BON (TAHAP 3) ---
 function getActiveShift() {
   return new Promise((resolve, reject) => {
     const tx = dbInstance.transaction(['shift'], 'readonly');
@@ -1146,6 +611,16 @@ function getAllPelangganBon() {
   });
 }
 
+function getPelangganBonById(pelangganId) {
+  return new Promise((resolve, reject) => {
+    const tx = dbInstance.transaction(['pelanggan_bon'], 'readonly');
+    const store = tx.objectStore('pelanggan_bon');
+    const req = store.get(pelangganId);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
 function savePelangganBon(pelanggan) {
   return new Promise((resolve, reject) => {
     const tx = dbInstance.transaction(['pelanggan_bon'], 'readwrite');
@@ -1161,16 +636,6 @@ function getTransaksiById(trxId) {
     const tx = dbInstance.transaction(['transaksi'], 'readonly');
     const store = tx.objectStore('transaksi');
     const req = store.get(trxId);
-    req.onsuccess = () => resolve(req.result || null);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-function getPelangganBonById(pelangganId) {
-  return new Promise((resolve, reject) => {
-    const tx = dbInstance.transaction(['pelanggan_bon'], 'readonly');
-    const store = tx.objectStore('pelanggan_bon');
-    const req = store.get(pelangganId);
     req.onsuccess = () => resolve(req.result || null);
     req.onerror = () => reject(req.error);
   });
@@ -1206,26 +671,6 @@ function getAllPembayaranBon() {
   });
 }
 
-// Menghitung nomor urut transaksi harian TRX-<YYYYMMDD>-XXX
-async function generateNextNomorTransaksi() {
-  const dateKey = getJakartaDateKey();
-  const prefix = `TRX-${dateKey}-`;
-
-  const allTrx = await new Promise((resolve) => {
-    const tx = dbInstance.transaction(['transaksi'], 'readonly');
-    const store = tx.objectStore('transaksi');
-    const req = store.getAll();
-    req.onsuccess = () => resolve(req.result || []);
-    req.onerror = () => resolve([]);
-  });
-
-  const todayCount = allTrx.filter(t => t.nomor && t.nomor.startsWith(prefix)).length;
-  const nextSeq = String(todayCount + 1).padStart(3, '0');
-  return `${prefix}${nextSeq}`;
-}
-
-
-// --- HELPER SHIFT, TRANSAKSI & LAPORAN (TAHAP 5) ---
 function getAllShifts() {
   return new Promise((resolve, reject) => {
     const tx = dbInstance.transaction(['shift'], 'readonly');
@@ -1306,6 +751,42 @@ function getAllVoidTransaksi() {
   });
 }
 
+function getAllVoidDetail() {
+  return new Promise((resolve, reject) => {
+    const tx = dbInstance.transaction(['void_detail'], 'readonly');
+    const store = tx.objectStore('void_detail');
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+// Rumus Sisa Bon Amendemen v1.3:
+// Pembayaran Bersih = total cicilan - total pengembalian
+// Sisa Bon = total_bon - pembayaran bersih
+function hitungPembayaranBersihBon(bonPayments) {
+  let cicilan = 0;
+  let pengembalian = 0;
+  for (const p of bonPayments) {
+    const amt = Number(p.jumlah) || 0;
+    if (p.tipe === 'PENGEMBALIAN') {
+      pengembalian += amt;
+    } else {
+      cicilan += amt;
+    }
+  }
+  const bersih = Math.max(0, cicilan - pengembalian);
+  return { cicilan, pengembalian, bersih };
+}
+
+async function generateNextNomorTransaksi() {
+  const dateKey = getJakartaDateKey();
+  const prefix = `TRX-${dateKey}-`;
+  const allTrx = await getAllTransaksi();
+  const todayCount = allTrx.filter(t => t.nomor && t.nomor.startsWith(prefix)).length;
+  const nextSeq = String(todayCount + 1).padStart(3, '0');
+  return `${prefix}${nextSeq}`;
+}
 
 // --- 7. NAVIGASI TAMPILAN ---
 function showView(viewId) {
@@ -1314,16 +795,12 @@ function showView(viewId) {
   if (target) {
     target.classList.remove('hidden');
   }
-  // Enforce batasan peran visual
   enforceRoleUI();
 }
 
 function enforceRoleUI() {
   const isPemilik = currentUser && currentUser.peran === 'pemilik';
   document.querySelectorAll('.role-pemilik-only').forEach(el => {
-    // Perbaikan Muse: visibilitas box-muat-contoh diatur khusus oleh
-    // renderProductListScreen (bergantung flag produk_contoh_dimuat),
-    // jangan ditimpa aturan peran umum ini.
     if (el.id === 'box-muat-contoh') return;
     if (isPemilik) {
       el.classList.remove('hidden');
@@ -1331,16 +808,12 @@ function enforceRoleUI() {
       el.classList.add('hidden');
     }
   });
-  // Menu Laporan khusus Pemilik (Tahap 5)
+
   const menuLaporan = document.getElementById('menu-laporan');
   if (menuLaporan) {
-    if (isPemilik) {
-      menuLaporan.classList.remove('hidden');
-    } else {
-      menuLaporan.classList.add('hidden');
-    }
+    if (isPemilik) menuLaporan.classList.remove('hidden');
+    else menuLaporan.classList.add('hidden');
   }
-
 }
 
 // --- 8. ALUR AUTENTIKASI & LOCKOUT ---
@@ -1358,7 +831,6 @@ function getLockoutState() {
 function recordFailedAttempt() {
   let attempts = parseInt(localStorage.getItem('wk_failed_attempts') || '0', 10) + 1;
   localStorage.setItem('wk_failed_attempts', attempts.toString());
-
   if (attempts >= MAX_LOGIN_ATTEMPTS) {
     const lockoutUntil = Date.now() + LOCKOUT_DURATION_MS;
     localStorage.setItem('wk_lockout_until', lockoutUntil.toString());
@@ -1412,12 +884,18 @@ function updateLockoutUI() {
 function updatePinDots() {
   const dots = document.querySelectorAll('#pin-dots .dot');
   dots.forEach((dot, index) => {
-    if (index < currentEnteredPin.length) {
-      dot.classList.add('filled');
-    } else {
-      dot.classList.remove('filled');
-    }
+    if (index < currentEnteredPin.length) dot.classList.add('filled');
+    else dot.classList.remove('filled');
   });
+}
+
+// Verifikasi Ulang PIN Pemilik untuk Aksi Sensitif (PRD §8.3)
+async function verifyOwnerReAuth(pinInput) {
+  if (!pinInput || pinInput.length < 4) return false;
+  const users = await getAllUsers();
+  const owner = users.find(u => u.peran === 'pemilik' && u.status_aktif !== false);
+  if (!owner) return false;
+  return verifyPin(pinInput, owner.pin_hash, owner.pin_salt, owner.pin_iterasi);
 }
 
 // --- 9. RENDER LOGIKA SCREEN ---
@@ -1464,11 +942,42 @@ async function renderDashboard() {
   const menuPengaturan = document.getElementById('menu-pengaturan');
   if (currentUser.peran === 'pemilik') {
     menuPengaturan.classList.remove('hidden');
+    await updateDashboardBackupReminder();
   } else {
     menuPengaturan.classList.add('hidden');
+    document.getElementById('dash-backup-reminder').classList.add('hidden');
   }
 
   showView('view-dashboard');
+}
+
+async function updateDashboardBackupReminder() {
+  const box = document.getElementById('dash-backup-reminder');
+  const titleEl = document.getElementById('dash-backup-status-title');
+  const descEl = document.getElementById('dash-backup-status-desc');
+  const lastBackupIso = await getPengaturan('cadangan_terakhir');
+
+  box.classList.remove('hidden');
+
+  if (!lastBackupIso) {
+    box.className = 'card mb-3 alert-warning';
+    titleEl.textContent = 'Belum Ada Cadangan Data!';
+    descEl.textContent = 'Data warung belum pernah dicadangkan. Cadangkan sekarang agar aman.';
+    return;
+  }
+
+  const lastDate = new Date(lastBackupIso);
+  const diffDays = (Date.now() - lastDate.getTime()) / (1000 * 60 * 60 * 24);
+
+  if (diffDays > 3) {
+    box.className = 'card mb-3 alert-warning';
+    titleEl.textContent = 'Sudah Waktunya Cadangkan Data';
+    descEl.textContent = `Cadangan terakhir: ${formatTanggalWIB(lastBackupIso)} (${Math.floor(diffDays)} hari lalu).`;
+  } else {
+    box.className = 'card mb-3';
+    titleEl.textContent = 'Cadangan Data Aman';
+    descEl.textContent = `Cadangan terakhir: ${formatTanggalWIB(lastBackupIso)} • ${formatJamWIB(lastBackupIso)}`;
+  }
 }
 
 async function renderPengaturanScreen() {
@@ -1480,6 +989,14 @@ async function renderPengaturanScreen() {
 
   const warungName = (await getPengaturan('nama_warung')) || '';
   document.getElementById('input-edit-warung-name').value = warungName;
+
+  const lastBackupIso = await getPengaturan('cadangan_terakhir');
+  const labelBackup = document.getElementById('pengaturan-cadangan-terakhir');
+  if (lastBackupIso) {
+    labelBackup.textContent = `${formatTanggalWIB(lastBackupIso)} • ${formatJamWIB(lastBackupIso)}`;
+  } else {
+    labelBackup.textContent = 'Belum pernah dicadangkan';
+  }
 
   await refreshUserTable();
   await refreshLogTable();
@@ -1493,7 +1010,6 @@ async function refreshUserTable() {
 
   users.forEach(u => {
     const tr = document.createElement('tr');
-
     const tdNama = document.createElement('td');
     tdNama.textContent = u.nama;
     tdNama.className = 'font-bold';
@@ -1562,21 +1078,16 @@ async function refreshLogTable() {
 }
 
 // --- 10. FITUR TAHAP 2: PRODUK & STOK ---
-
-// Format ekuivalen satuan jual terbesar (misal: 125 batang -> ~10 bungkus 5 batang)
 function formatEquivalentUnit(stockBase, baseUnit, units) {
   if (!units || units.length === 0 || stockBase <= 0) {
     return `${stockBase} ${baseUnit}`;
   }
 
-  // Cari satuan aktif dengan faktor konversi terbesar
   const sorted = [...units]
     .filter(u => u.status_aktif !== false && Number(u.faktor_konversi) > 1)
     .sort((a, b) => Number(b.faktor_konversi) - Number(a.faktor_konversi));
 
-  if (sorted.length === 0) {
-    return `${stockBase} ${baseUnit}`;
-  }
+  if (sorted.length === 0) return `${stockBase} ${baseUnit}`;
 
   const largest = sorted[0];
   const factor = Number(largest.faktor_konversi);
@@ -1584,9 +1095,7 @@ function formatEquivalentUnit(stockBase, baseUnit, units) {
   const remainder = stockBase % factor;
 
   if (packageCount > 0) {
-    if (remainder > 0) {
-      return `${stockBase} ${baseUnit} (~${packageCount} ${largest.nama_satuan} + ${remainder} ${baseUnit})`;
-    }
+    if (remainder > 0) return `${stockBase} ${baseUnit} (~${packageCount} ${largest.nama_satuan} + ${remainder} ${baseUnit})`;
     return `${stockBase} ${baseUnit} (~${packageCount} ${largest.nama_satuan})`;
   }
 
@@ -1597,7 +1106,6 @@ async function loadProductsCache() {
   const allProds = await getAllProducts();
   cachedActiveProducts = allProds.filter(p => p.status_aktif !== false);
 
-  // Ambil semua pergerakan stok untuk hitung saldo per produk secara cepat
   cachedStockMap = {};
   const allMovements = await new Promise((resolve) => {
     const tx = dbInstance.transaction(['pergerakan_stok'], 'readonly');
@@ -1611,13 +1119,10 @@ async function loadProductsCache() {
     cachedStockMap[m.produk_id] = (cachedStockMap[m.produk_id] || 0) + (Number(m.jumlah) || 0);
   }
 
-  // Ambil semua satuan turunan
   const allUnits = await getAllUnits();
   cachedUnitsMap = {};
   for (const u of allUnits) {
-    if (!cachedUnitsMap[u.produk_id]) {
-      cachedUnitsMap[u.produk_id] = [];
-    }
+    if (!cachedUnitsMap[u.produk_id]) cachedUnitsMap[u.produk_id] = [];
     cachedUnitsMap[u.produk_id].push(u);
   }
 }
@@ -1625,7 +1130,6 @@ async function loadProductsCache() {
 async function renderProductListScreen() {
   await loadProductsCache();
 
-  // Tampilkan/sembunyikan tombol 'Muat Produk Contoh'
   const contohDimuat = await getPengaturan('produk_contoh_dimuat');
   const boxContoh = document.getElementById('box-muat-contoh');
   if (currentUser && currentUser.peran === 'pemilik' && !contohDimuat) {
@@ -1638,9 +1142,7 @@ async function renderProductListScreen() {
   showView('view-produk');
 }
 
-// Pencarian & Filter Cepat In-Memory (<300ms untuk 1.000 produk)
 function filterAndRenderProducts() {
-  const tStart = performance.now();
   const container = document.getElementById('list-produk-container');
   container.innerHTML = '';
 
@@ -1653,19 +1155,15 @@ function filterAndRenderProducts() {
     return matchCat && matchKw;
   });
 
-  // Urutkan: favorit di atas, lalu abjad nama
   filtered.sort((a, b) => {
     if (a.favorit && !b.favorit) return -1;
     if (!a.favorit && b.favorit) return 1;
     return a.nama.localeCompare(b.nama);
   });
 
-  // Hitung jumlah stok menipis dari keseluruhan produk aktif
   cachedActiveProducts.forEach(p => {
     const s = cachedStockMap[p.id] || 0;
-    if (s <= (Number(p.stok_minimum) || 0)) {
-      lowStockCount++;
-    }
+    if (s <= (Number(p.stok_minimum) || 0)) lowStockCount++;
   });
 
   const labelMenipis = document.getElementById('label-menipis-count');
@@ -1679,11 +1177,7 @@ function filterAndRenderProducts() {
   document.getElementById('label-total-produk').textContent = `Menampilkan ${filtered.length} produk`;
 
   if (filtered.length === 0) {
-    container.innerHTML = `
-      <div class="card text-center text-muted" style="padding: 30px;">
-        Belum ada produk yang cocok.
-      </div>
-    `;
+    container.innerHTML = `<div class="card text-center text-muted" style="padding: 30px;">Belum ada produk yang cocok.</div>`;
     return;
   }
 
@@ -1722,13 +1216,8 @@ function filterAndRenderProducts() {
   });
 
   container.appendChild(fragment);
-  const dur = performance.now() - tStart;
-  if (dur > 50) {
-    console.log(`Render produk selesai dalam ${dur.toFixed(2)} ms`);
-  }
 }
 
-// Buka Detail Produk
 async function openProductDetail(productId) {
   activeDetailProductId = productId;
   const prod = await getProductById(productId);
@@ -1738,7 +1227,6 @@ async function openProductDetail(productId) {
   const movements = await getMovementsByProductId(productId);
   const units = (await getAllUnits()).filter(u => u.produk_id === productId);
 
-  // Isi data info utama
   document.getElementById('detail-prod-kategori').textContent = prod.kategori;
   document.getElementById('detail-prod-nama').textContent = prod.nama;
   document.getElementById('detail-prod-satuan-dasar').textContent = prod.satuan_dasar;
@@ -1747,26 +1235,16 @@ async function openProductDetail(productId) {
   document.getElementById('detail-prod-jual').textContent = formatRp(prod.harga_jual);
 
   const favSpan = document.getElementById('detail-prod-fav');
-  if (prod.favorit) {
-    favSpan.classList.remove('hidden');
-  } else {
-    favSpan.classList.add('hidden');
-  }
+  if (prod.favorit) favSpan.classList.remove('hidden');
+  else favSpan.classList.add('hidden');
 
-  // Status stok
   document.getElementById('detail-prod-saldo-angka').textContent = stock;
   document.getElementById('detail-prod-saldo-satuan').textContent = prod.satuan_dasar;
   const eqText = formatEquivalentUnit(stock, prod.satuan_dasar, units);
-  document.getElementById('detail-prod-konversi-teks').textContent = (eqText !== `${stock} ${prod.satuan_dasar}`)
-    ? `Ekuivalen: ${eqText}`
-    : '';
+  document.getElementById('detail-prod-konversi-teks').textContent = (eqText !== `${stock} ${prod.satuan_dasar}`) ? `Ekuivalen: ${eqText}` : '';
 
-  // Render daftar satuan turunan
   renderUnitsList(prod, units);
-
-  // Render riwayat ledger
   renderLedgerTable(movements, prod.satuan_dasar);
-
   showView('view-produk-detail');
 }
 
@@ -1774,7 +1252,6 @@ function renderUnitsList(prod, units) {
   const container = document.getElementById('list-satuan-turunan');
   container.innerHTML = '';
 
-  // Satuan dasar otomatis dapat dijual
   const baseRow = document.createElement('div');
   baseRow.className = 'unit-row';
   baseRow.innerHTML = `
@@ -1842,7 +1319,6 @@ function renderLedgerTable(movements, baseUnit) {
     return;
   }
 
-  // Tampilkan 25 pergerakan terakhir dari paling baru
   const recent = [...movements].reverse().slice(0, 25);
 
   recent.forEach(m => {
@@ -1865,7 +1341,6 @@ function renderLedgerTable(movements, baseUnit) {
   });
 }
 
-// Buka Form Tambah / Edit Produk
 function openProductForm(product = null) {
   if (!currentUser || currentUser.peran !== 'pemilik') {
     alert('Hanya Pemilik yang dapat menambah atau mengubah produk!');
@@ -1902,7 +1377,6 @@ function openProductForm(product = null) {
   showView('view-produk-form');
 }
 
-// Buka Dialog Modal Mutasi Stok
 function openMutasiModal(jenis) {
   if (!currentUser || currentUser.peran !== 'pemilik') {
     alert('Hanya Pemilik yang berhak mengubah stok!');
@@ -1941,7 +1415,6 @@ function openMutasiModal(jenis) {
   inputJml.focus();
 }
 
-// Buka Modal Satuan Jual Turunan
 function openSatuanModal(satuan = null) {
   if (!currentUser || currentUser.peran !== 'pemilik') {
     alert('Hanya Pemilik yang dapat menambah satuan!');
@@ -1955,14 +1428,11 @@ function openSatuanModal(satuan = null) {
 
   title.textContent = satuan ? 'Ubah Satuan Jual' : 'Tambah Satuan Jual Turunan';
   document.getElementById('modal-satuan-id').value = satuan ? satuan.id : '';
-
   modal.classList.remove('hidden');
 }
 
-// Muat Produk Contoh Secara Atomik dalam Satu Transaksi IndexedDB
 async function muatProdukContoh() {
   if (!currentUser || currentUser.peran !== 'pemilik') return;
-  // Perbaikan Muse: cegah pemuatan ganda yang menggandakan produk contoh.
   if (await getPengaturan('produk_contoh_dimuat')) {
     alert('Produk contoh sudah pernah dimuat.');
     return;
@@ -1980,12 +1450,11 @@ async function muatProdukContoh() {
     const storeMove = tx.objectStore('pergerakan_stok');
     const storeSet = tx.objectStore('pengaturan');
     const storeLog = tx.objectStore('log_aktivitas');
-
     const nowIso = new Date().toISOString();
 
     for (const item of PRODUK_CONTOH) {
       const prodId = generateUUID();
-      const prodRecord = {
+      storeProd.add({
         id: prodId,
         nama: item.nama,
         kategori: item.kategori,
@@ -1996,28 +1465,24 @@ async function muatProdukContoh() {
         favorit: Boolean(item.favorit),
         status_aktif: true,
         dibuat_pada: nowIso
-      };
-      storeProd.add(prodRecord);
+      });
 
-      // Satuan turunan
       if (Array.isArray(item.satuan_turunan)) {
         for (const unit of item.satuan_turunan) {
-          const unitRecord = {
+          storeUnit.add({
             id: generateUUID(),
             produk_id: prodId,
             nama_satuan: unit.nama_satuan,
             faktor_konversi: Math.round(Number(unit.faktor_konversi) || 1),
             harga_jual: Math.round(Number(unit.harga_jual) || 0),
             status_aktif: true
-          };
-          storeUnit.add(unitRecord);
+          });
         }
       }
 
-      // Pergerakan stok awal (MASUK_KULAKAN)
       const stokAwal = Math.round(Number(item.stok_awal) || 0);
       if (stokAwal > 0) {
-        const moveRecord = {
+        storeMove.add({
           id: generateUUID(),
           produk_id: prodId,
           jenis: 'MASUK_KULAKAN',
@@ -2026,15 +1491,11 @@ async function muatProdukContoh() {
           pengguna_id: currentUser.id,
           waktu: nowIso,
           keterangan: 'Stok awal contoh'
-        };
-        storeMove.add(moveRecord);
+        });
       }
     }
 
-    // Set flag agar tombol tidak muncul lagi
     storeSet.put({ kunci: 'produk_contoh_dimuat', nilai: true });
-
-    // Catat log
     storeLog.add({
       id: generateUUID(),
       pengguna_id: currentUser.id,
@@ -2058,29 +1519,20 @@ async function muatProdukContoh() {
     alert('Terjadi kesalahan saat memproses data contoh.');
   }
 }
-
 // --- 11. FITUR TAHAP 3: KASIR, SHIFT GATE & TRANSAKSI ---
-
-// Buka Gerbang Kasir (Shift Check)
 async function enterKasirModule() {
   currentShift = await getActiveShift();
-
   if (!currentShift) {
-    // Tampilkan Modal Buka Shift
     document.getElementById('input-shift-kasir-nama').value = currentUser.nama;
     document.getElementById('input-shift-modal-awal').value = '0';
     document.getElementById('modal-buka-shift').classList.remove('hidden');
     return;
   }
-
-  // Shift aktif ditemukan, masuk layar kasir
   await initKasirScreen();
 }
 
 async function initKasirScreen() {
   await loadProductsCache();
-
-  // Update chip info shift
   const kasirUser = await getUserById(currentShift.kasir_id);
   const kasirNama = kasirUser ? kasirUser.nama : 'Kasir';
   const waktuBuka = new Date(currentShift.waktu_buka).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
@@ -2094,7 +1546,6 @@ async function initKasirScreen() {
 function renderKasirProductGrid() {
   const grid = document.getElementById('kasir-product-grid');
   grid.innerHTML = '';
-
   const kw = currentKasirSearch.toLowerCase().trim();
 
   const filtered = cachedActiveProducts.filter(p => {
@@ -2103,7 +1554,6 @@ function renderKasirProductGrid() {
     return matchCat && matchKw;
   });
 
-  // Favorit di atas, lalu alfabetis
   filtered.sort((a, b) => {
     if (a.favorit && !b.favorit) return -1;
     if (!a.favorit && b.favorit) return 1;
@@ -2144,10 +1594,9 @@ function renderKasirProductGrid() {
   grid.appendChild(fragment);
 }
 
-// Buka Modal Picker Unit & Qty
 function openPickerModal(product) {
   activePickerProduct = product;
-  selectedPickerUnit = null; // Default: satuan dasar
+  selectedPickerUnit = null;
 
   const stock = cachedStockMap[product.id] || 0;
   const units = (cachedUnitsMap[product.id] || []).filter(u => u.status_aktif !== false);
@@ -2156,11 +1605,9 @@ function openPickerModal(product) {
   document.getElementById('picker-prod-stok').textContent = `Stok tersedia: ${stock} ${product.satuan_dasar}`;
   document.getElementById('input-picker-qty').value = '1';
 
-  // Render pilihan satuan (Satuan Dasar + Turunan)
   const optionsContainer = document.getElementById('picker-unit-options');
   optionsContainer.innerHTML = '';
 
-  // 1. Opsi Satuan Dasar
   const baseCard = document.createElement('div');
   baseCard.className = 'unit-radio-card selected';
   baseCard.setAttribute('data-unit-id', 'DASAR');
@@ -2174,7 +1621,6 @@ function openPickerModal(product) {
   baseCard.onclick = () => selectPickerUnitOption(baseCard, null);
   optionsContainer.appendChild(baseCard);
 
-  // 2. Opsi Satuan Turunan
   units.forEach(u => {
     const uCard = document.createElement('div');
     uCard.className = 'unit-radio-card';
@@ -2205,18 +1651,9 @@ function updatePickerSubtotal() {
   if (!activePickerProduct) return;
   const qty = Math.max(1, parseInt(document.getElementById('input-picker-qty').value || '1', 10));
 
-  let pricePerUnit = 0;
-  let factor = 1;
+  let pricePerUnit = selectedPickerUnit ? Number(selectedPickerUnit.harga_jual) : Number(activePickerProduct.harga_jual);
+  let factor = selectedPickerUnit ? Number(selectedPickerUnit.faktor_konversi) : 1;
 
-  if (selectedPickerUnit) {
-    pricePerUnit = Number(selectedPickerUnit.harga_jual);
-    factor = Number(selectedPickerUnit.faktor_konversi);
-  } else {
-    pricePerUnit = Number(activePickerProduct.harga_jual);
-    factor = 1;
-  }
-
-  // Aturan A5: subtotal dibulatkan half-up ke rupiah terdekat
   const subtotal = Math.round(pricePerUnit * qty);
   const totalBaseQty = qty * factor;
   const currentStock = cachedStockMap[activePickerProduct.id] || 0;
@@ -2224,14 +1661,10 @@ function updatePickerSubtotal() {
   document.getElementById('picker-subtotal').textContent = formatRp(subtotal);
 
   const warningEl = document.getElementById('picker-stok-warning');
-  if (totalBaseQty > currentStock) {
-    warningEl.classList.remove('hidden');
-  } else {
-    warningEl.classList.add('hidden');
-  }
+  if (totalBaseQty > currentStock) warningEl.classList.remove('hidden');
+  else warningEl.classList.add('hidden');
 }
 
-// Tambah Produk Terpilih ke Keranjang
 function addActivePickerToCart() {
   if (!activePickerProduct) return;
 
@@ -2247,7 +1680,6 @@ function addActivePickerToCart() {
   const currentStock = cachedStockMap[activePickerProduct.id] || 0;
   const isOverStock = jumlahDasar > currentStock;
 
-  // Cek jika produk + satuan yang sama sudah ada di keranjang
   const existingIdx = cartItems.findIndex(i => i.produk_id === activePickerProduct.id && i.satuan_id === satuanId);
 
   if (existingIdx > -1) {
@@ -2256,7 +1688,7 @@ function addActivePickerToCart() {
     cartItems[existingIdx].subtotal = Math.round(cartItems[existingIdx].harga_satuan * cartItems[existingIdx].jumlah_satuan);
     cartItems[existingIdx].stok_lewat = (cartItems[existingIdx].jumlah_dasar > currentStock);
   } else {
-    const cartItem = {
+    cartItems.push({
       id: generateUUID(),
       produk_id: activePickerProduct.id,
       nama_produk: activePickerProduct.nama,
@@ -2268,8 +1700,7 @@ function addActivePickerToCart() {
       jumlah_dasar: jumlahDasar,
       subtotal: subtotal,
       stok_lewat: isOverStock
-    };
-    cartItems.push(cartItem);
+    });
   }
 
   document.getElementById('modal-picker').classList.add('hidden');
@@ -2279,12 +1710,10 @@ function addActivePickerToCart() {
   updateCartUI();
 }
 
-// Update Tampilan Keranjang & Bar Bawah
 function updateCartUI() {
   const totalItemsCount = cartItems.reduce((acc, item) => acc + item.jumlah_satuan, 0);
   const totalBill = cartItems.reduce((acc, item) => acc + item.subtotal, 0);
 
-  // Update Bar Bawah
   document.getElementById('bottom-bar-items').textContent = `${totalItemsCount} item`;
   document.getElementById('bottom-bar-total').textContent = formatRp(totalBill);
   document.getElementById('cart-badge-count').textContent = totalItemsCount;
@@ -2292,7 +1721,6 @@ function updateCartUI() {
   const btnBayar = document.getElementById('btn-bottom-bayar');
   btnBayar.disabled = (cartItems.length === 0);
 
-  // Render Daftar Keranjang di Modal
   renderCartModalItems(totalBill);
 }
 
@@ -2327,7 +1755,6 @@ function renderCartModalItems(totalBill) {
       </div>
     `;
 
-    // Event Stepper Keranjang
     row.querySelector(`[data-cart-minus="${index}"]`).onclick = () => {
       if (item.jumlah_satuan > 1) {
         item.jumlah_satuan--;
@@ -2355,25 +1782,19 @@ function renderCartModalItems(totalBill) {
   });
 }
 
-// Buka Modal Pembayaran
 async function openPaymentModal() {
   if (cartItems.length === 0) return;
 
   const totalBill = cartItems.reduce((acc, item) => acc + item.subtotal, 0);
   document.getElementById('pay-total-tagihan').textContent = formatRp(totalBill);
 
-  // Reset form pembayaran
   document.getElementById('input-pay-tunai-received').value = '';
   document.getElementById('input-pay-qris').value = '';
   document.getElementById('input-pay-bon').value = '';
 
-  // Muat daftar pelanggan bon
   await refreshPelangganBonDropdown();
-
-  // Hitung invarian awal
   recalculatePaymentInvariant();
 
-  // Tutup sheet keranjang, buka modal bayar
   document.getElementById('modal-cart').classList.add('hidden');
   document.getElementById('modal-payment').classList.remove('hidden');
 }
@@ -2391,7 +1812,6 @@ async function refreshPelangganBonDropdown() {
   });
 }
 
-// Kalkulasi Invarian Ketat Pembayaran (A5 + PRD §2)
 function recalculatePaymentInvariant() {
   const totalBill = cartItems.reduce((acc, item) => acc + item.subtotal, 0);
 
@@ -2399,26 +1819,17 @@ function recalculatePaymentInvariant() {
   const rawQris = Math.max(0, Math.round(Number(document.getElementById('input-pay-qris').value) || 0));
   const rawBon = Math.max(0, Math.round(Number(document.getElementById('input-pay-bon').value) || 0));
 
-  // Tampilkan/sembunyikan pemilih pelanggan bon jika porsi bon > 0
   const bonSection = document.getElementById('bon-customer-section');
-  if (rawBon > 0) {
-    bonSection.classList.remove('hidden');
-  } else {
-    bonSection.classList.add('hidden');
-  }
+  if (rawBon > 0) bonSection.classList.remove('hidden');
+  else bonSection.classList.add('hidden');
 
-  // Tagihan yang harus ditutup oleh tunai = totalBill - QRIS - Bon
   const sisaSebelumTunai = Math.max(0, totalBill - rawQris - rawBon);
-
-  // Komponen tunai yang terhitung untuk melunasi tagihan
   const tunaiApplied = Math.min(rawCashReceived, sisaSebelumTunai);
   const kembalian = Math.max(0, rawCashReceived - sisaSebelumTunai);
 
-  // Tampilkan breakdown
   document.getElementById('pay-tunai-applied').textContent = `Terhitung: ${formatRp(tunaiApplied)}`;
   document.getElementById('pay-tunai-change').textContent = formatRp(kembalian);
 
-  // Total pembayaran yang sah menutup tagihan
   const totalPaymentApplied = tunaiApplied + rawQris + rawBon;
   const sisaKurang = totalBill - totalPaymentApplied;
 
@@ -2460,7 +1871,6 @@ function recalculatePaymentInvariant() {
   };
 }
 
-// Simpan Transaksi Atomik dalam Satu Transaksi IndexedDB
 async function eksekusiSimpanTransaksi() {
   const calc = recalculatePaymentInvariant();
   if (!calc.isValid) {
@@ -2482,7 +1892,6 @@ async function eksekusiSimpanTransaksi() {
     const trxId = generateUUID();
     const nowIso = new Date().toISOString();
 
-    // Hitung saldo berjalan stok per produk secara atomik
     const productRunningStock = {};
     for (const item of cartItems) {
       if (productRunningStock[item.produk_id] === undefined) {
@@ -2502,7 +1911,6 @@ async function eksekusiSimpanTransaksi() {
     const storeBon = tx.objectStore('bon');
     const storeLog = tx.objectStore('log_aktivitas');
 
-    // 1. Simpan Transaksi Header
     const trxRecord = {
       id: trxId,
       nomor: nomorTransaksi,
@@ -2516,7 +1924,7 @@ async function eksekusiSimpanTransaksi() {
     };
     storeTrx.add(trxRecord);
 
-    // 2. Simpan Transaksi Item & Mutasi Stok (Ledger JUAL)
+    const savedItems = [];
     for (const item of cartItems) {
       const itemId = generateUUID();
       const itemRecord = {
@@ -2534,77 +1942,82 @@ async function eksekusiSimpanTransaksi() {
         stok_lewat: item.stok_lewat
       };
       storeItem.add(itemRecord);
+      savedItems.push(itemRecord);
 
-      // Hitung saldo sesudah secara berurutan
       productRunningStock[item.produk_id] -= item.jumlah_dasar;
       const saldoSesudah = productRunningStock[item.produk_id];
 
-      const moveRecord = {
+      storeMove.add({
         id: generateUUID(),
         produk_id: item.produk_id,
         jenis: 'JUAL',
-        jumlah: -item.jumlah_dasar, // Berkurang
+        jumlah: -item.jumlah_dasar,
         saldo_sesudah: saldoSesudah,
         pengguna_id: currentUser.id,
         waktu: nowIso,
         keterangan: `Penjualan ${nomorTransaksi}`
-      };
-      storeMove.add(moveRecord);
+      });
     }
 
-    // 3. Simpan Pembayaran Transaksi (Tunai, QRIS, Bon)
+    const savedPayments = [];
     const metodeList = [];
 
     if (calc.tunaiApplied > 0 || calc.rawCashReceived > 0) {
       metodeList.push('tunai');
-      storePay.add({
+      const pTunai = {
         id: generateUUID(),
         transaksi_id: trxId,
         metode: 'tunai',
         nominal: calc.tunaiApplied,
         uang_diterima: calc.rawCashReceived,
         kembalian: calc.kembalian
-      });
+      };
+      storePay.add(pTunai);
+      savedPayments.push(pTunai);
     }
 
     if (calc.rawQris > 0) {
       metodeList.push('qris');
-      storePay.add({
+      const pQris = {
         id: generateUUID(),
         transaksi_id: trxId,
         metode: 'qris',
         nominal: calc.rawQris,
         uang_diterima: calc.rawQris,
         kembalian: 0
-      });
+      };
+      storePay.add(pQris);
+      savedPayments.push(pQris);
     }
 
+    let pelangganNameForReceipt = '';
     if (calc.rawBon > 0) {
       metodeList.push('bon');
       const pelangganId = document.getElementById('select-bon-pelanggan').value;
+      const pelSelect = document.getElementById('select-bon-pelanggan');
+      pelangganNameForReceipt = pelSelect.options[pelSelect.selectedIndex]?.text || 'Pelanggan';
 
-      storePay.add({
+      const pBon = {
         id: generateUUID(),
         transaksi_id: trxId,
         metode: 'bon',
         nominal: calc.rawBon,
         uang_diterima: calc.rawBon,
         kembalian: 0
-      });
+      };
+      storePay.add(pBon);
+      savedPayments.push(pBon);
 
-      // Buat record bon baru
-      const bonRecord = {
+      storeBon.add({
         id: generateUUID(),
         pelanggan_id: pelangganId,
         transaksi_id: trxId,
         jumlah: calc.rawBon,
         status: 'belum_lunas',
         dibuat_pada: nowIso
-      };
-      storeBon.add(bonRecord);
+      });
     }
 
-    // 4. Catat Log Aktivitas Transaksi
     storeLog.add({
       id: generateUUID(),
       pengguna_id: currentUser.id,
@@ -2618,56 +2031,549 @@ async function eksekusiSimpanTransaksi() {
       })
     });
 
-    tx.oncomplete = () => {
-      // Sukses atomik
+    tx.oncomplete = async () => {
       document.getElementById('modal-payment').classList.add('hidden');
-
-      // Tampilkan Layar Sukses
-      document.getElementById('success-trx-nomor').textContent = nomorTransaksi;
-      document.getElementById('success-total').textContent = formatRp(calc.totalBill);
-
-      let breakdownStr = `Metode: ${metodeList.map(m => m.toUpperCase()).join(' + ')}`;
-      if (calc.rawBon > 0) {
-        const pelSelect = document.getElementById('select-bon-pelanggan');
-        breakdownStr += ` (Bon: ${pelSelect.options[pelSelect.selectedIndex].text})`;
-      }
-      document.getElementById('success-breakdown').textContent = breakdownStr;
-
-      const changeRow = document.getElementById('success-change-row');
-      if (calc.kembalian > 0) {
-        changeRow.classList.remove('hidden');
-        document.getElementById('success-change').textContent = formatRp(calc.kembalian);
-      } else {
-        changeRow.classList.add('hidden');
-      }
-
-      document.getElementById('modal-success').classList.remove('hidden');
-
-      // Kosongkan keranjang & refresh cache stok lokal
       cartItems = [];
       updateCartUI();
-      loadProductsCache().then(() => renderKasirProductGrid());
+      await loadProductsCache();
+      renderKasirProductGrid();
+
+      // Tampilkan Struk Transaksi Lengkap (Tahap 6)
+      await openReceiptModal(trxId, true);
     };
 
     tx.onerror = (e) => {
-      console.error('Transaksi gagal dan dibatalkan (rollback):', e.target.error);
+      console.error('Transaksi dibatalkan:', e.target.error);
       alert('Terjadi kesalahan saat menyimpan transaksi. Data aman.');
       btnSubmit.disabled = false;
       btnSubmit.textContent = 'Simpan Transaksi (Selesai)';
     };
 
   } catch (err) {
-    console.error('Error saat simpan transaksi:', err);
+    console.error('Error simpan transaksi:', err);
     alert('Terjadi kegagalan sistem penyimpanan transaksi.');
     btnSubmit.disabled = false;
     btnSubmit.textContent = 'Simpan Transaksi (Selesai)';
   }
 }
 
+// --- 12. TAHAP 6: STRUK TRANSAKSI & DETAIL TRANSAKSI ---
+async function openReceiptModal(trxId, isNewTransaction = false) {
+  const [trx, allItems, allPayments, allUsers, allBons, allPelanggan, allVoids] = await Promise.all([
+    getTransaksiById(trxId),
+    getAllTransaksiItems(),
+    getAllPembayaranTransaksi(),
+    getAllUsers(),
+    getAllBons(),
+    getAllPelangganBon(),
+    getAllVoidTransaksi()
+  ]);
 
-// --- 12. FITUR TAHAP 4: BUKU BON DIGITAL ---
+  if (!trx) {
+    alert('Data transaksi tidak ditemukan.');
+    return;
+  }
 
-// Kalkulasi buku bon dari database: memuat semua pelanggan yang pernah punya bon
+  const items = allItems.filter(i => i.transaksi_id === trxId);
+  const payments = allPayments.filter(p => p.transaksi_id === trxId);
+  const kasirUser = allUsers.find(u => u.id === trx.kasir_id);
+  const kasirNama = kasirUser ? kasirUser.nama : 'Kasir';
+  const warungName = (await getPengaturan('nama_warung')) || 'WarungKas';
+
+  const bonRecord = allBons.find(b => b.transaksi_id === trxId);
+  let pelangganNama = '';
+  if (bonRecord) {
+    const pel = allPelanggan.find(p => p.id === bonRecord.pelanggan_id);
+    pelangganNama = pel ? pel.nama : 'Pelanggan';
+  }
+
+  const voidRecord = allVoids.find(v => v.transaksi_id === trxId);
+
+  activeReceiptData = {
+    trx,
+    items,
+    payments,
+    kasirNama,
+    warungName,
+    pelangganNama,
+    bonRecord,
+    voidRecord
+  };
+
+  // Render Isi Struk di Kertas
+  document.getElementById('receipt-store-name').textContent = warungName;
+  document.getElementById('receipt-meta').textContent = `${trx.nomor} • Kasir: ${kasirNama}`;
+  document.getElementById('receipt-time').textContent = `${formatTanggalWIB(trx.waktu)} ${formatJamWIB(trx.waktu)}`;
+
+  // Banner status VOID
+  const voidBanner = document.getElementById('receipt-void-banner');
+  const voidMeta = document.getElementById('receipt-void-meta');
+  if (trx.status === 'void' && voidRecord) {
+    voidBanner.classList.remove('hidden');
+    voidMeta.textContent = `Waktu: ${formatJamWIB(voidRecord.waktu)} • Alasan: ${voidRecord.alasan}`;
+  } else {
+    voidBanner.classList.add('hidden');
+  }
+
+  // Daftar Item
+  const itemsContainer = document.getElementById('receipt-items-list');
+  itemsContainer.innerHTML = '';
+  items.forEach(it => {
+    const row = document.createElement('div');
+    row.className = 'receipt-item-row';
+    row.innerHTML = `
+      <div>
+        <div class="font-bold">${it.nama_produk}</div>
+        <div class="text-xs text-muted">${it.jumlah_satuan} ${it.nama_satuan} × ${formatRp(it.harga_satuan)}</div>
+      </div>
+      <div class="font-bold">${formatRp(it.subtotal)}</div>
+    `;
+    itemsContainer.appendChild(row);
+  });
+
+  // Total
+  document.getElementById('receipt-total').textContent = formatRp(trx.total);
+
+  // Rincian Pembayaran
+  const payContainer = document.getElementById('receipt-payments-breakdown');
+  payContainer.innerHTML = '';
+
+  let hasBon = false;
+  payments.forEach(p => {
+    const pRow = document.createElement('div');
+    pRow.className = 'flex-between';
+    if (p.metode === 'tunai') {
+      pRow.innerHTML = `
+        <span>💵 Tunai (Diterima: ${formatRp(p.uang_diterima)})</span>
+        <span>${formatRp(p.nominal)}</span>
+      `;
+      payContainer.appendChild(pRow);
+      if (Number(p.kembalian) > 0) {
+        const changeRow = document.createElement('div');
+        changeRow.className = 'flex-between text-xs text-muted';
+        changeRow.innerHTML = `<span>Kembalian Tunai:</span><span>${formatRp(p.kembalian)}</span>`;
+        payContainer.appendChild(changeRow);
+      }
+    } else if (p.metode === 'qris') {
+      pRow.innerHTML = `
+        <span>📱 QRIS</span>
+        <span>${formatRp(p.nominal)}</span>
+      `;
+      payContainer.appendChild(pRow);
+    } else if (p.metode === 'bon') {
+      hasBon = true;
+      pRow.innerHTML = `
+        <span>📖 Bon (${pelangganNama})</span>
+        <span class="text-amber font-bold">${formatRp(p.nominal)}</span>
+      `;
+      payContainer.appendChild(pRow);
+    }
+  });
+
+  // Status Badge
+  const statusChip = document.getElementById('receipt-status-chip');
+  if (trx.status === 'void') {
+    statusChip.className = 'pay-badge pay-badge-void';
+    statusChip.textContent = 'VOID (BATAL)';
+  } else if (hasBon) {
+    statusChip.className = 'pay-badge pay-badge-unpaid';
+    statusChip.textContent = `Bon (${pelangganNama})`;
+  } else {
+    statusChip.className = 'pay-badge pay-badge-paid';
+    statusChip.textContent = 'Lunas';
+  }
+
+  // Tombol & Aksi Struk
+  const btnNewTrx = document.getElementById('btn-receipt-new-trx');
+  const btnVoid = document.getElementById('btn-receipt-open-void');
+  const qrisActionBox = document.getElementById('receipt-qris-action-box');
+
+  if (isNewTransaction) {
+    btnNewTrx.classList.remove('hidden');
+    btnNewTrx.textContent = 'Transaksi Baru (Selesai)';
+  } else {
+    btnNewTrx.classList.add('hidden');
+  }
+
+  // Tombol Void: Hanya Pemilik & Hanya Transaksi yang belum void
+  if (currentUser && currentUser.peran === 'pemilik' && trx.status !== 'void') {
+    btnVoid.classList.remove('hidden');
+  } else {
+    btnVoid.classList.add('hidden');
+  }
+
+  // Kotak Penanda QRIS sudah dikembalikan jika void memiliki status_qris === 'menunggu'
+  if (currentUser && currentUser.peran === 'pemilik' && trx.status === 'void' && voidRecord && voidRecord.status_qris === 'menunggu') {
+    qrisActionBox.classList.remove('hidden');
+    document.getElementById('receipt-qris-status-badge').textContent = 'Menunggu';
+  } else {
+    qrisActionBox.classList.add('hidden');
+  }
+
+  document.getElementById('modal-receipt').classList.remove('hidden');
+}
+
+// Format Teks Struk WhatsApp
+function formatReceiptTextForWA(receipt) {
+  const { trx, items, payments, kasirNama, warungName, pelangganNama, voidRecord } = receipt;
+  let text = `*${warungName.toUpperCase()}*\n`;
+  text += `No: ${trx.nomor}\n`;
+  text += `Waktu: ${formatTanggalWIB(trx.waktu)} ${formatJamWIB(trx.waktu)}\n`;
+  text += `Kasir: ${kasirNama}\n`;
+  if (trx.status === 'void') {
+    text += `*STATUS: VOID / DIBATALKAN*\n`;
+    if (voidRecord) text += `Alasan: ${voidRecord.alasan}\n`;
+  }
+  text += `--------------------------------\n`;
+
+  items.forEach(it => {
+    text += `${it.nama_produk}\n`;
+    text += `  ${it.jumlah_satuan} ${it.nama_satuan} × ${formatRp(it.harga_satuan)} = ${formatRp(it.subtotal)}\n`;
+  });
+
+  text += `--------------------------------\n`;
+  text += `*TOTAL: ${formatRp(trx.total)}*\n`;
+
+  payments.forEach(p => {
+    if (p.metode === 'tunai') {
+      text += `Tunai: ${formatRp(p.nominal)} (Diterima: ${formatRp(p.uang_diterima)})\n`;
+      if (Number(p.kembalian) > 0) text += `Kembalian: ${formatRp(p.kembalian)}\n`;
+    } else if (p.metode === 'qris') {
+      text += `QRIS: ${formatRp(p.nominal)}\n`;
+    } else if (p.metode === 'bon') {
+      text += `Bon (${pelangganNama}): ${formatRp(p.nominal)}\n`;
+    }
+  });
+
+  text += `--------------------------------\n`;
+  text += `Terima kasih atas kunjungan Anda!`;
+  return text;
+}
+
+// --- 13. TAHAP 6: VOID TRANSAKSI (PRD §3 + AMENDEMEN v1.3) ---
+async function openVoidModal(trx) {
+  if (!currentUser || currentUser.peran !== 'pemilik') {
+    alert('Hanya Pemilik yang berhak melakukan void transaksi!');
+    return;
+  }
+
+  activeVoidTargetTrx = trx;
+  const form = document.getElementById('form-void-transaksi');
+  form.reset();
+
+  const errBox = document.getElementById('void-submit-error');
+  const blockedMsg = document.getElementById('void-blocked-msg');
+  const formContainer = document.getElementById('void-form-container');
+  errBox.classList.add('hidden');
+  blockedMsg.classList.add('hidden');
+  formContainer.classList.remove('hidden');
+
+  // 1. Validasi Pemblokiran: Sudah Void?
+  if (trx.status === 'void') {
+    blockedMsg.textContent = 'Transaksi ini sudah pernah dibatalkan (VOID).';
+    blockedMsg.classList.remove('hidden');
+    formContainer.classList.add('hidden');
+    document.getElementById('modal-void').classList.remove('hidden');
+    return;
+  }
+
+  // 2. Validasi Pemblokiran: Bon memiliki pembayaran bersih > 0?
+  const allBons = await getAllBons();
+  const targetBon = allBons.find(b => b.transaksi_id === trx.id);
+
+  if (targetBon) {
+    const allPayments = await getAllPembayaranBon();
+    const bonPays = allPayments.filter(p => p.bon_id === targetBon.id);
+    const bersihObj = hitungPembayaranBersihBon(bonPays);
+
+    if (bersihObj.bersih > 0) {
+      blockedMsg.innerHTML = `
+        <strong>Void Ditolak:</strong> Bon transaksi ini sudah memiliki riwayat pembayaran bersih sebesar ${formatRp(bersihObj.bersih)}.<br><br>
+        Silakan selesaikan <strong>Pengembalian Pembayaran Bon</strong> terlebih dahulu pada menu Buku Bon sebelum membatalkan transaksi ini.
+      `;
+      blockedMsg.classList.remove('hidden');
+      formContainer.classList.add('hidden');
+      document.getElementById('modal-void').classList.remove('hidden');
+      return;
+    }
+  }
+
+  // Ambil rincian pembayaran untuk info form
+  const allPays = await getAllPembayaranTransaksi();
+  const trxPays = allPays.filter(p => p.transaksi_id === trx.id);
+  const payTunai = trxPays.find(p => p.metode === 'tunai');
+  const payQris = trxPays.find(p => p.metode === 'qris');
+  const payBon = trxPays.find(p => p.metode === 'bon');
+
+  document.getElementById('void-target-nomor').textContent = trx.nomor;
+  document.getElementById('void-target-total').textContent = formatRp(trx.total);
+
+  let breakdownStr = [];
+  if (payTunai) breakdownStr.push(`Tunai: ${formatRp(payTunai.nominal)}`);
+  if (payQris) breakdownStr.push(`QRIS: ${formatRp(payQris.nominal)}`);
+  if (payBon) breakdownStr.push(`Bon: ${formatRp(payBon.nominal)}`);
+  document.getElementById('void-target-breakdown').textContent = breakdownStr.join(' • ');
+
+  // Opsi Kembalikan Uang Tunai
+  const cashGroup = document.getElementById('group-void-cash-refund');
+  const shiftActive = await getActiveShift();
+  const shiftHint = document.getElementById('void-shift-cash-hint');
+
+  if (!payTunai || payTunai.nominal <= 0) {
+    cashGroup.classList.add('hidden');
+  } else {
+    cashGroup.classList.remove('hidden');
+    if (!shiftActive) {
+      cashGroup.querySelectorAll('input[name="void-refund-cash"]').forEach(r => {
+        if (r.value === 'tidak') r.checked = true;
+        r.disabled = true;
+      });
+      shiftHint.textContent = 'Tidak ada shift aktif. Buka shift dulu di kasir jika ingin mencatat pengembalian tunai ke laci.';
+      shiftHint.className = 'form-hint text-danger';
+    } else {
+      cashGroup.querySelectorAll('input[name="void-refund-cash"]').forEach(r => {
+        if (r.value === 'ya') r.checked = true;
+        r.disabled = false;
+      });
+      shiftHint.textContent = 'Akan dicatat sebagai pengeluaran kas (Pengembalian Void) pada shift aktif.';
+      shiftHint.className = 'form-hint';
+    }
+  }
+
+  document.getElementById('modal-void').classList.remove('hidden');
+  document.getElementById('input-void-alasan').focus();
+}
+
+async function eksekusiSimpanVoid(e) {
+  e.preventDefault();
+  if (!activeVoidTargetTrx || !currentUser || currentUser.peran !== 'pemilik') return;
+
+  const alasan = document.getElementById('input-void-alasan').value.trim();
+  const pinInput = document.getElementById('input-void-pin-pemilik').value;
+  const errBox = document.getElementById('void-submit-error');
+  errBox.classList.add('hidden');
+
+  if (!alasan) {
+    errBox.textContent = 'Alasan void transaksi wajib diisi!';
+    errBox.classList.remove('hidden');
+    return;
+  }
+
+  // Verifikasi Ulang PIN Pemilik
+  const pinValid = await verifyOwnerReAuth(pinInput);
+  if (!pinValid) {
+    errBox.textContent = 'PIN Pemilik salah! Otorisasi void ditolak.';
+    errBox.classList.remove('hidden');
+    return;
+  }
+
+  const trx = activeVoidTargetTrx;
+  const btnSubmit = document.getElementById('btn-submit-void');
+  btnSubmit.disabled = true;
+  btnSubmit.textContent = 'Memproses Void...';
+
+  try {
+    const [allItems, allPays, allBons, shiftActive] = await Promise.all([
+      getAllTransaksiItems(),
+      getAllPembayaranTransaksi(),
+      getAllBons(),
+      getActiveShift()
+    ]);
+
+    const items = allItems.filter(i => i.transaksi_id === trx.id);
+    const payments = allPays.filter(p => p.transaksi_id === trx.id);
+    const bonRecord = allBons.find(b => b.transaksi_id === trx.id);
+
+    const hasQris = payments.some(p => p.metode === 'qris' && Number(p.nominal) > 0);
+    const payTunai = payments.find(p => p.metode === 'tunai' && Number(p.nominal) > 0);
+
+    const refundCashVal = document.querySelector('input[name="void-refund-cash"]:checked')?.value || 'tidak';
+    const kembalikanTunai = Boolean(payTunai && refundCashVal === 'ya' && shiftActive);
+
+    const nowIso = new Date().toISOString();
+    const voidId = generateUUID();
+
+    // Hitung stok terkini langsung dari ledger pergerakan_stok
+    // (jangan mengandalkan cachedStockMap: cache layar bisa kosong/basi
+    // bila void dibuka dari Laporan atau Detail Shift)
+    const voidStockMap = {};
+    for (const it of items) {
+      if (voidStockMap[it.produk_id] === undefined) {
+        voidStockMap[it.produk_id] = await getCalculatedStock(it.produk_id);
+      }
+    }
+    // Jalankan SATU Transaksi IndexedDB Atomik
+    const tx = dbInstance.transaction(
+      ['transaksi', 'void_transaksi', 'void_detail', 'pergerakan_stok', 'pengeluaran_kas', 'bon', 'log_aktivitas'],
+      'readwrite'
+    );
+
+    const storeTrx = tx.objectStore('transaksi');
+    const storeVoid = tx.objectStore('void_transaksi');
+    const storeVoidDetail = tx.objectStore('void_detail');
+    const storeMove = tx.objectStore('pergerakan_stok');
+    const storeExpense = tx.objectStore('pengeluaran_kas');
+    const storeBon = tx.objectStore('bon');
+    const storeLog = tx.objectStore('log_aktivitas');
+
+    // a. Update status transaksi -> 'void'
+    trx.status = 'void';
+    storeTrx.put(trx);
+
+    // b. Buat void_transaksi
+    const statusQris = hasQris ? 'menunggu' : 'tidak_perlu';
+    storeVoid.add({
+      id: voidId,
+      transaksi_id: trx.id,
+      waktu: nowIso,
+      oleh_pemilik_id: currentUser.id,
+      alasan: alasan,
+      kembalikan_tunai: kembalikanTunai,
+      status_qris: statusQris
+    });
+
+    // c. Buat void_detail per komponen pembayaran
+    payments.forEach(p => {
+      let statusPengembalian = 'tidak_dikembalikan';
+      if (p.metode === 'tunai') {
+        statusPengembalian = kembalikanTunai ? 'sudah_dikembalikan' : 'tidak_dikembalikan';
+      } else if (p.metode === 'qris') {
+        statusPengembalian = statusQris;
+      } else if (p.metode === 'bon') {
+        statusPengembalian = 'dibatalkan';
+      }
+
+      storeVoidDetail.add({
+        id: generateUUID(),
+        void_id: voidId,
+        komponen: p.metode,
+        nominal: Number(p.nominal) || 0,
+        status_pengembalian: statusPengembalian
+      });
+    });
+
+    // d. Mutasi stok VOID_JUAL per item (stok kembali bertambah)
+    for (const it of items) {
+      const currentStock = voidStockMap[it.produk_id] || 0;
+      const saldoSesudah = currentStock + Number(it.jumlah_dasar);
+      voidStockMap[it.produk_id] = saldoSesudah;
+      cachedStockMap[it.produk_id] = saldoSesudah;
+
+      storeMove.add({
+        id: generateUUID(),
+        produk_id: it.produk_id,
+        jenis: 'VOID_JUAL',
+        jumlah: Number(it.jumlah_dasar),
+        saldo_sesudah: saldoSesudah,
+        pengguna_id: currentUser.id,
+        waktu: nowIso,
+        keterangan: `Void Penjualan ${trx.nomor}`
+      });
+    }
+
+    // e. Jika kembalikan tunai: catat pengeluaran kas PENGEMBALIAN_VOID
+    if (kembalikanTunai && payTunai) {
+      storeExpense.add({
+        id: generateUUID(),
+        shift_id: shiftActive.id,
+        jenis: 'PENGEMBALIAN_VOID',
+        jumlah: Number(payTunai.nominal),
+        keterangan: `Pengembalian tunai void ${trx.nomor}`,
+        void_transaksi_id: voidId,
+        pengguna_id: currentUser.id,
+        waktu: nowIso
+      });
+    }
+
+    // f. Jika ada bon dan pembayaran bersih 0: ubah status bon -> 'void'
+    if (bonRecord) {
+      bonRecord.status = 'void';
+      storeBon.put(bonRecord);
+    }
+
+    // g. Log aktivitas
+    storeLog.add({
+      id: generateUUID(),
+      pengguna_id: currentUser.id,
+      waktu: nowIso,
+      aksi: 'VOID_TRANSAKSI',
+      objek: 'transaksi',
+      detail: JSON.stringify({
+        transaksi_id: trx.id,
+        nomor: trx.nomor,
+        alasan: alasan,
+        kembalikan_tunai: kembalikanTunai,
+        status_qris: statusQris
+      })
+    });
+
+    tx.oncomplete = async () => {
+      document.getElementById('modal-void').classList.add('hidden');
+      btnSubmit.disabled = false;
+      btnSubmit.textContent = 'Konfirmasi Void';
+
+      alert(`Transaksi ${trx.nomor} berhasil dibatalkan (VOID). Stok barang telah dikembalikan.`);
+      await loadProductsCache();
+
+      // Perbarui tampilan struk yang sedang terbuka
+      await openReceiptModal(trx.id, false);
+    };
+
+    tx.onerror = (err) => {
+      console.error('Void gagal:', err.target.error);
+      alert('Terjadi kesalahan sistem saat membatalkan transaksi.');
+      btnSubmit.disabled = false;
+      btnSubmit.textContent = 'Konfirmasi Void';
+    };
+
+  } catch (err) {
+    console.error('Error saat proses void:', err);
+    alert('Terjadi kegagalan memproses void.');
+    btnSubmit.disabled = false;
+    btnSubmit.textContent = 'Konfirmasi Void';
+  }
+}
+
+// Tandai Pengembalian QRIS pada Transaksi Void
+async function tandaiQrisDikembalikan(trxId) {
+  if (!currentUser || currentUser.peran !== 'pemilik') return;
+  if (!confirm('Tandai bahwa dana QRIS telah dikembalikan secara manual ke pelanggan?')) return;
+
+  const [allVoids, allVoidDetails] = await Promise.all([
+    getAllVoidTransaksi(),
+    getAllVoidDetail()
+  ]);
+
+  const voidTrx = allVoids.find(v => v.transaksi_id === trxId);
+  if (!voidTrx) return;
+
+  voidTrx.status_qris = 'sudah_dikembalikan';
+
+  const tx = dbInstance.transaction(['void_transaksi', 'void_detail', 'log_aktivitas'], 'readwrite');
+  tx.objectStore('void_transaksi').put(voidTrx);
+
+  const targetDetail = allVoidDetails.find(d => d.void_id === voidTrx.id && d.komponen === 'qris');
+  if (targetDetail) {
+    targetDetail.status_pengembalian = 'sudah_dikembalikan';
+    tx.objectStore('void_detail').put(targetDetail);
+  }
+
+  tx.objectStore('log_aktivitas').add({
+    id: generateUUID(),
+    pengguna_id: currentUser.id,
+    waktu: new Date().toISOString(),
+    aksi: 'UBAH_STATUS_QRIS_VOID',
+    objek: 'void_transaksi',
+    detail: JSON.stringify({ void_id: voidTrx.id, status_qris: 'sudah_dikembalikan' })
+  });
+
+  tx.oncomplete = async () => {
+    alert('Status pengembalian QRIS diperbarui: Sudah Dikembalikan.');
+    await openReceiptModal(trxId, false);
+  };
+}
+
+// --- 14. FITUR TAHAP 4 & 6: BUKU BON & PENGEMBALIAN PEMBAYARAN BON ---
 async function loadBukuBonData() {
   const [allPelanggan, allBons, allPayments] = await Promise.all([
     getAllPelangganBon(),
@@ -2675,13 +2581,13 @@ async function loadBukuBonData() {
     getAllPembayaranBon()
   ]);
 
-  // Map pembayaran per bon_id: Σ nominal
-  const paymentByBonId = {};
-  for (const pay of allPayments) {
-    paymentByBonId[pay.bon_id] = (paymentByBonId[pay.bon_id] || 0) + (Number(pay.jumlah) || 0);
+  // Agregasi pembayaran & pengembalian per bon_id sesuai Amendemen v1.3
+  const bonCalcMap = {};
+  for (const b of allBons) {
+    const pays = allPayments.filter(p => p.bon_id === b.id);
+    bonCalcMap[b.id] = hitungPembayaranBersihBon(pays);
   }
 
-  // Agregasi per pelanggan
   const pelangganMap = {};
   for (const p of allPelanggan) {
     pelangganMap[p.id] = {
@@ -2695,26 +2601,30 @@ async function loadBukuBonData() {
   }
 
   for (const b of allBons) {
-    const totalBayar = paymentByBonId[b.id] || 0;
+    if (b.status === 'void') continue;
+
+    const calc = bonCalcMap[b.id] || { cicilan: 0, pengembalian: 0, bersih: 0 };
     const jumlahBon = Number(b.jumlah) || 0;
-    const sisa = Math.max(0, jumlahBon - totalBayar);
+    const sisa = Math.max(0, jumlahBon - calc.bersih);
 
     if (pelangganMap[b.pelanggan_id]) {
       pelangganMap[b.pelanggan_id].total_bon += jumlahBon;
-      pelangganMap[b.pelanggan_id].total_dibayar += totalBayar;
+      pelangganMap[b.pelanggan_id].total_dibayar += calc.bersih;
       pelangganMap[b.pelanggan_id].sisa_bon += sisa;
       if (sisa > 0) {
         pelangganMap[b.pelanggan_id].unpaid_count += 1;
       }
       pelangganMap[b.pelanggan_id].bons.push({
         ...b,
-        sudah_bayar: totalBayar,
+        sudah_bayar: calc.bersih,
+        total_cicilan: calc.cicilan,
+        total_pengembalian: calc.pengembalian,
         sisa: sisa
       });
     }
   }
 
-  // Filter: hanya pelanggan yang PERNAH memiliki record bon
+  // Filter: hanya pelanggan yang PERNAH memiliki record bon (non-void)
   cachedBonCustomers = Object.values(pelangganMap).filter(p => p.bons.length > 0);
 
   // Urutkan: sisa bon terbesar di atas, lalu nama A-Z
@@ -2738,7 +2648,6 @@ function filterAndRenderBonCustomers() {
 
   const kw = currentBonSearch.toLowerCase().trim();
 
-  // Hitung total seluruh sisa bon warung & pelanggan yang masih berutang
   let totalSemuaBon = 0;
   let berutangCount = 0;
 
@@ -2768,7 +2677,7 @@ function filterAndRenderBonCustomers() {
   if (cachedBonCustomers.length === 0) {
     container.innerHTML = `
       <div class="card text-center text-muted" style="padding: 24px; line-height: 1.5;">
-        Belum ada catatan bon.<br>
+        Belum ada catatan bon aktif.<br>
         <span class="text-xs">Bon tercatat otomatis saat transaksi kasir dibayar sebagian/seluruhnya dengan bon.</span>
       </div>
     `;
@@ -2815,11 +2724,9 @@ function filterAndRenderBonCustomers() {
   container.appendChild(fragment);
 }
 
-// Buka Detail Pelanggan Bon
 async function openBonCustomerDetail(pelangganId) {
   activeBonCustomerId = pelangganId;
 
-  // Muat data segar langsung dari database
   const [pelanggan, allBons, allPayments] = await Promise.all([
     getPelangganBonById(pelangganId),
     getAllBons(),
@@ -2828,58 +2735,49 @@ async function openBonCustomerDetail(pelangganId) {
 
   if (!pelanggan) return;
 
-  // Filter bon pelanggan ini
-  const customerBons = allBons.filter(b => b.pelanggan_id === pelangganId);
+  const customerBons = allBons.filter(b => b.pelanggan_id === pelangganId && b.status !== 'void');
   const bonIdsSet = new Set(customerBons.map(b => b.id));
 
-  // Filter pembayaran bon pelanggan ini
+  // Ambil semua pembayaran & pengembalian bon milik pelanggan ini
   const customerPayments = allPayments.filter(pay => bonIdsSet.has(pay.bon_id));
 
-  // Map total bayar per bon
-  const paymentByBonId = {};
-  for (const pay of customerPayments) {
-    paymentByBonId[pay.bon_id] = (paymentByBonId[pay.bon_id] || 0) + (Number(pay.jumlah) || 0);
-  }
-
-  // Hitung total ringkasan
+  // Hitung agregasi per bon
   let totalBon = 0;
   let totalSudahBayar = 0;
   let totalSisa = 0;
 
   customerBons.forEach(b => {
-    const bayar = paymentByBonId[b.id] || 0;
-    const jumlah = Number(b.jumlah) || 0;
-    const sisa = Math.max(0, jumlah - bayar);
+    const pays = customerPayments.filter(p => p.bon_id === b.id);
+    const calc = hitungPembayaranBersihBon(pays);
+    const sisa = Math.max(0, (Number(b.jumlah) || 0) - calc.bersih);
 
-    totalBon += jumlah;
-    totalSudahBayar += bayar;
+    totalBon += (Number(b.jumlah) || 0);
+    totalSudahBayar += calc.bersih;
     totalSisa += sisa;
 
-    b.sudah_bayar = bayar;
+    b.sudah_bayar = calc.bersih;
+    b.total_cicilan = calc.cicilan;
+    b.total_pengembalian = calc.pengembalian;
     b.sisa = sisa;
   });
 
-  // Urutkan bon: terbaru di atas
   customerBons.sort((a, b) => new Date(b.dibuat_pada) - new Date(a.dibuat_pada));
 
-  // Tampilkan data info pelanggan
   document.getElementById('detail-bon-pelanggan-nama').textContent = pelanggan.nama;
   const hpText = pelanggan.no_hp ? `HP: ${pelanggan.no_hp}` : 'HP: -';
   const alamatText = pelanggan.alamat ? `Alamat: ${pelanggan.alamat}` : 'Alamat: -';
   document.getElementById('detail-bon-pelanggan-kontak').textContent = `${hpText} • ${alamatText}`;
 
-  // Tampilkan 3 angka ringkasan
   document.getElementById('detail-stat-total-bon').textContent = formatRp(totalBon);
   document.getElementById('detail-stat-sudah-bayar').textContent = formatRp(totalSudahBayar);
   document.getElementById('detail-stat-sisa-bon').textContent = formatRp(totalSisa);
 
-  // Konfigurasi tombol share WhatsApp
   const btnWa = document.getElementById('btn-share-wa-bon');
   btnWa.onclick = async () => {
     const warungName = (await getPengaturan('nama_warung')) || 'WarungKas';
     const waText = `Halo ${pelanggan.nama}, ringkasan bon di ${warungName}:\n` +
                    `Total bon: ${formatRp(totalBon)}\n` +
-                   `Sudah dibayar: ${formatRp(totalSudahBayar)}\n` +
+                   `Sudah dibayar (bersih): ${formatRp(totalSudahBayar)}\n` +
                    `Sisa bon: ${formatRp(totalSisa)}.\n` +
                    `Terima kasih.`;
 
@@ -2893,10 +2791,7 @@ async function openBonCustomerDetail(pelangganId) {
     window.open(waUrl, '_blank');
   };
 
-  // Render daftar tagihan bon
   await renderCustomerBonsList(customerBons, pelanggan);
-
-  // Render tabel riwayat pembayaran
   await renderCustomerPaymentsList(customerPayments, customerBons);
 
   showView('view-bon-detail');
@@ -2907,11 +2802,10 @@ async function renderCustomerBonsList(customerBons, pelanggan) {
   container.innerHTML = '';
 
   if (customerBons.length === 0) {
-    container.innerHTML = '<div class="text-xs text-muted text-center" style="padding: 12px;">Tidak ada catatan bon.</div>';
+    container.innerHTML = '<div class="text-xs text-muted text-center" style="padding: 12px;">Tidak ada catatan bon aktif.</div>';
     return;
   }
 
-  // Pre-load nomor transaksi untuk setiap bon
   const trxMap = {};
   for (const b of customerBons) {
     if (b.transaksi_id) {
@@ -2931,6 +2825,8 @@ async function renderCustomerBonsList(customerBons, pelanggan) {
     const card = document.createElement('div');
     card.className = 'bon-bill-card';
 
+    const canRefund = (currentUser && currentUser.peran === 'pemilik' && b.sudah_bayar > 0);
+
     card.innerHTML = `
       <div class="bon-bill-header">
         <div>
@@ -2948,7 +2844,7 @@ async function renderCustomerBonsList(customerBons, pelanggan) {
           <strong style="display: block;">${formatRp(b.jumlah)}</strong>
         </div>
         <div>
-          <span class="text-xs text-muted">Dibayar</span>
+          <span class="text-xs text-muted">Bayar Bersih</span>
           <strong class="text-success" style="display: block;">${formatRp(b.sudah_bayar)}</strong>
         </div>
         <div>
@@ -2957,16 +2853,28 @@ async function renderCustomerBonsList(customerBons, pelanggan) {
         </div>
       </div>
 
-      ${!isLunas ? `
-        <button type="button" class="btn btn-primary btn-sm btn-block mt-1" data-bon-pay="${b.id}">
-          💵 Catat Pembayaran
-        </button>
-      ` : ''}
+      <div class="flex-between mt-1" style="gap: 8px;">
+        ${!isLunas ? `
+          <button type="button" class="btn btn-primary btn-sm flex-1" data-bon-pay="${b.id}">
+            💵 Catat Bayar
+          </button>
+        ` : ''}
+        ${canRefund ? `
+          <button type="button" class="btn btn-danger-sm flex-1" style="min-height: 38px;" data-bon-refund="${b.id}">
+            ↩️ Pengembalian
+          </button>
+        ` : ''}
+      </div>
     `;
 
     const payBtn = card.querySelector(`[data-bon-pay="${b.id}"]`);
     if (payBtn) {
       payBtn.onclick = () => openPayBonModal(b, pelanggan, trxNomor);
+    }
+
+    const refundBtn = card.querySelector(`[data-bon-refund="${b.id}"]`);
+    if (refundBtn) {
+      refundBtn.onclick = () => openRefundBonModal(b, pelanggan);
     }
 
     fragment.appendChild(card);
@@ -2984,7 +2892,6 @@ async function renderCustomerPaymentsList(payments, customerBons) {
     return;
   }
 
-  // Map bon_id -> nomor transaksi
   const bonTrxMap = {};
   for (const b of customerBons) {
     if (b.transaksi_id) {
@@ -2993,7 +2900,6 @@ async function renderCustomerPaymentsList(payments, customerBons) {
     }
   }
 
-  // Urutkan pembayaran: terbaru di atas
   const sortedPayments = [...payments].sort((a, b) => new Date(b.waktu) - new Date(a.waktu));
 
   sortedPayments.forEach(p => {
@@ -3001,20 +2907,27 @@ async function renderCustomerPaymentsList(payments, customerBons) {
     const d = new Date(p.waktu);
     const dateStr = `${d.getDate()}/${d.getMonth() + 1} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
     const trxNomor = bonTrxMap[p.bon_id] || '-';
-    const metodeLabel = (p.metode || 'tunai').toUpperCase();
+    const isRefund = (p.tipe === 'PENGEMBALIAN');
+
+    const jenisLabel = isRefund
+      ? '<span class="text-danger font-bold">↩️ Pengembalian</span>'
+      : `<span class="text-xs font-bold">${(p.metode || 'tunai').toUpperCase()}</span>`;
+
+    const nominalDisplay = isRefund
+      ? `<span class="text-danger font-bold">− ${formatRp(p.jumlah)}</span>`
+      : `<span class="text-success font-bold">+ ${formatRp(p.jumlah)}</span>`;
 
     tr.innerHTML = `
       <td class="text-xs text-muted">${dateStr}</td>
       <td class="font-bold text-xs">${trxNomor}</td>
-      <td class="text-xs">${metodeLabel}</td>
-      <td class="font-bold text-success">${formatRp(p.jumlah)}</td>
+      <td>${jenisLabel}</td>
+      <td>${nominalDisplay}</td>
     `;
 
     tbody.appendChild(tr);
   });
 }
 
-// Buka Modal Pembayaran Bon
 function openPayBonModal(bon, pelanggan, trxNomor) {
   activePayingBonId = bon.id;
 
@@ -3029,14 +2942,12 @@ function openPayBonModal(bon, pelanggan, trxNomor) {
   inputNominal.value = '';
   inputNominal.max = bon.sisa;
 
-  // Default metode: tunai
   document.querySelectorAll('input[name="paybon-metode"]').forEach(radio => {
     radio.checked = (radio.value === 'tunai');
   });
 
   document.getElementById('paybon-error-msg').classList.add('hidden');
 
-  // Tombol bayar lunas
   document.getElementById('btn-paybon-lunas').onclick = () => {
     inputNominal.value = bon.sisa;
     document.getElementById('paybon-error-msg').classList.add('hidden');
@@ -3046,7 +2957,6 @@ function openPayBonModal(bon, pelanggan, trxNomor) {
   inputNominal.focus();
 }
 
-// Simpan Pembayaran Bon Atomik
 async function eksekusiSimpanPembayaranBon(e) {
   e.preventDefault();
 
@@ -3064,11 +2974,11 @@ async function eksekusiSimpanPembayaranBon(e) {
     return;
   }
 
-  // Hitung ulang sisa bon saat ini secara akurat
+  // Hitung sisa bon saat ini secara akurat memakai rumus Amendemen v1.3
   const allPayments = await getAllPembayaranBon();
   const currentPayments = allPayments.filter(p => p.bon_id === bonId);
-  const totalSudahBayar = currentPayments.reduce((acc, p) => acc + (Number(p.jumlah) || 0), 0);
-  const sisaSaatIni = Math.max(0, (Number(bon.jumlah) || 0) - totalSudahBayar);
+  const calc = hitungPembayaranBersihBon(currentPayments);
+  const sisaSaatIni = Math.max(0, (Number(bon.jumlah) || 0) - calc.bersih);
 
   if (nominalInput <= 0) {
     errorBox.textContent = 'Nominal pembayaran harus lebih dari Rp 0!';
@@ -3102,25 +3012,22 @@ async function eksekusiSimpanPembayaranBon(e) {
     const storeBon = tx.objectStore('bon');
     const storeLog = tx.objectStore('log_aktivitas');
 
-    // 1. Tambah record pembayaran_bon
-    const paymentRecord = {
+    storePayBon.add({
       id: generateUUID(),
       bon_id: bonId,
       jumlah: nominalInput,
       metode: selectedMetode,
+      tipe: 'CICILAN',
       shift_id: shiftId,
       pengguna_id: currentUser ? currentUser.id : 'sistem',
       waktu: nowIso
-    };
-    storePayBon.add(paymentRecord);
+    });
 
-    // 2. Perbarui status bon jika sisa menjadi 0
     if (sisaSetelahnya === 0) {
       bon.status = 'lunas';
       storeBon.put(bon);
     }
 
-    // 3. Catat log aktivitas
     storeLog.add({
       id: generateUUID(),
       pengguna_id: currentUser ? currentUser.id : 'sistem',
@@ -3130,11 +3037,9 @@ async function eksekusiSimpanPembayaranBon(e) {
       detail: JSON.stringify({
         bon_id: bonId,
         pelanggan_id: bon.pelanggan_id,
-        transaksi_id: bon.transaksi_id,
         jumlah_bayar: nominalInput,
         metode: selectedMetode,
-        sisa_akhir: sisaSetelahnya,
-        status_akhir: sisaSetelahnya === 0 ? 'lunas' : 'belum_lunas'
+        sisa_akhir: sisaSetelahnya
       })
     });
 
@@ -3144,32 +3049,205 @@ async function eksekusiSimpanPembayaranBon(e) {
       btnSubmit.textContent = 'Simpan Pembayaran';
 
       alert(`Pembayaran bon ${formatRp(nominalInput)} (${selectedMetode.toUpperCase()}) berhasil dicatat.`);
-
-      // Segarkan layar detail pelanggan
       if (activeBonCustomerId) {
         await openBonCustomerDetail(activeBonCustomerId);
       }
     };
 
     tx.onerror = (e) => {
-      console.error('Gagal menyimpan pembayaran bon:', e.target.error);
+      console.error('Gagal mencatat cicilan bon:', e.target.error);
       alert('Gagal mencatat pembayaran bon. Coba lagi.');
       btnSubmit.disabled = false;
       btnSubmit.textContent = 'Simpan Pembayaran';
     };
 
   } catch (err) {
-    console.error('Error pembayaran bon:', err);
-    alert('Terjadi kesalahan sistem saat menyimpan pembayaran bon.');
+    console.error('Error bayar bon:', err);
+    alert('Terjadi kesalahan sistem.');
     btnSubmit.disabled = false;
     btnSubmit.textContent = 'Simpan Pembayaran';
   }
 }
 
+// Buka Modal Pengembalian Pembayaran Bon (Tahap 6 - PRD §3.1)
+async function openRefundBonModal(bon, pelanggan) {
+  if (!currentUser || currentUser.peran !== 'pemilik') {
+    alert('Hanya Pemilik yang berhak melakukan pengembalian pembayaran bon!');
+    return;
+  }
 
-// --- 12B. FITUR TAHAP 5: SHIFT KASIR & REKONSILIASI KAS ---
+  const shiftActive = await getActiveShift();
+  if (!shiftActive) {
+    alert('Tidak ada shift kasir yang sedang aktif!\nBuka shift kasir terlebih dahulu untuk mencatat uang keluar laci pengembalian.');
+    return;
+  }
 
-// Menghitung angka shift segar dari DB (Shift Aktif maupun Selesai)
+  activeRefundBonId = bon.id;
+  document.getElementById('form-refund-bon').reset();
+  document.getElementById('input-refundbon-bon-id').value = bon.id;
+  document.getElementById('refundbon-error-msg').classList.add('hidden');
+
+  const allPayments = await getAllPembayaranBon();
+  const pays = allPayments.filter(p => p.bon_id === bon.id);
+  const calc = hitungPembayaranBersihBon(pays);
+
+  document.getElementById('modal-refundbon-nama-pelanggan').textContent = pelanggan.nama;
+  document.getElementById('modal-refundbon-total-bayar').textContent = formatRp(calc.cicilan);
+  document.getElementById('modal-refundbon-total-kembali').textContent = formatRp(calc.pengembalian);
+  document.getElementById('modal-refundbon-maks-kembali').textContent = formatRp(calc.bersih);
+
+  const inputNominal = document.getElementById('input-refundbon-nominal');
+  inputNominal.max = calc.bersih;
+  inputNominal.value = '';
+
+  document.getElementById('modal-refund-bon').classList.remove('hidden');
+  inputNominal.focus();
+}
+
+async function eksekusiSimpanRefundBon(e) {
+  e.preventDefault();
+  if (!activeRefundBonId || !currentUser || currentUser.peran !== 'pemilik') return;
+
+  const errBox = document.getElementById('refundbon-error-msg');
+  errBox.classList.add('hidden');
+
+  const shiftActive = await getActiveShift();
+  if (!shiftActive) {
+    errBox.textContent = 'Shift aktif tidak ditemukan. Buka shift kasir terlebih dahulu.';
+    errBox.classList.remove('hidden');
+    return;
+  }
+
+  const bonId = activeRefundBonId;
+  const bon = await getBonById(bonId);
+  if (!bon) return;
+
+  const nominal = Math.round(Number(document.getElementById('input-refundbon-nominal').value) || 0);
+  const alasan = document.getElementById('input-refundbon-alasan').value.trim();
+  const pinInput = document.getElementById('input-refundbon-pin').value;
+
+  const pinValid = await verifyOwnerReAuth(pinInput);
+  if (!pinValid) {
+    errBox.textContent = 'PIN Pemilik salah! Otorisasi ditolak.';
+    errBox.classList.remove('hidden');
+    return;
+  }
+
+  const allPayments = await getAllPembayaranBon();
+  const pays = allPayments.filter(p => p.bon_id === bonId);
+  const calc = hitungPembayaranBersihBon(pays);
+
+  if (nominal <= 0) {
+    errBox.textContent = 'Nominal pengembalian harus lebih dari Rp 0!';
+    errBox.classList.remove('hidden');
+    return;
+  }
+
+  if (nominal > calc.bersih) {
+    errBox.textContent = `Nominal melebihi pembayaran bersih (${formatRp(calc.bersih)})!`;
+    errBox.classList.remove('hidden');
+    return;
+  }
+
+  const btnSubmit = document.getElementById('btn-submit-refundbon');
+  btnSubmit.disabled = true;
+  btnSubmit.textContent = 'Memproses...';
+
+  try {
+    const nowIso = new Date().toISOString();
+    const payId = generateUUID();
+    const expId = generateUUID();
+
+    // SATU Transaksi IndexedDB Atomik
+    const tx = dbInstance.transaction(
+      ['pembayaran_bon', 'pengeluaran_kas', 'bon', 'log_aktivitas'],
+      'readwrite'
+    );
+
+    const storePayBon = tx.objectStore('pembayaran_bon');
+    const storeExpense = tx.objectStore('pengeluaran_kas');
+    const storeBon = tx.objectStore('bon');
+    const storeLog = tx.objectStore('log_aktivitas');
+
+    // 1. Tambah baris pembayaran_bon tipe PENGEMBALIAN
+    storePayBon.add({
+      id: payId,
+      bon_id: bonId,
+      jumlah: nominal,
+      metode: 'tunai',
+      tipe: 'PENGEMBALIAN',
+      shift_id: shiftActive.id,
+      pengguna_id: currentUser.id,
+      waktu: nowIso,
+      keterangan: alasan
+    });
+
+    // 2. Tambah baris pengeluaran_kas jenis PENGEMBALIAN_BON
+    storeExpense.add({
+      id: expId,
+      shift_id: shiftActive.id,
+      jenis: 'PENGEMBALIAN_BON',
+      jumlah: nominal,
+      keterangan: `Pengembalian bon: ${alasan}`,
+      bon_id: bonId,
+      pengguna_id: currentUser.id,
+      waktu: nowIso
+    });
+
+    // 3. Status bon kembali belum_lunas jika sebelumnya lunas
+    bon.status = 'belum_lunas';
+    storeBon.put(bon);
+
+    // 4. Log aktivitas
+    storeLog.add({
+      id: generateUUID(),
+      pengguna_id: currentUser.id,
+      waktu: nowIso,
+      aksi: 'PENGEMBALIAN_BON',
+      objek: 'bon',
+      detail: JSON.stringify({
+        bon_id: bonId,
+        jumlah_pengembalian: nominal,
+        alasan: alasan,
+        shift_id: shiftActive.id
+      })
+    });
+
+    tx.oncomplete = async () => {
+      document.getElementById('modal-refund-bon').classList.add('hidden');
+      btnSubmit.disabled = false;
+      btnSubmit.textContent = 'Simpan Pengembalian';
+
+      alert(`Pengembalian pembayaran bon sebesar ${formatRp(nominal)} berhasil dicatat.`);
+      if (activeBonCustomerId) {
+        await openBonCustomerDetail(activeBonCustomerId);
+      }
+    };
+
+    tx.onerror = (err) => {
+      console.error('Pengembalian bon gagal:', err.target.error);
+      alert('Gagal memproses pengembalian bon.');
+      btnSubmit.disabled = false;
+      btnSubmit.textContent = 'Simpan Pengembalian';
+    };
+
+  } catch (err) {
+    console.error('Error saat simpan refund bon:', err);
+    alert('Terjadi kegagalan sistem.');
+    btnSubmit.disabled = false;
+    btnSubmit.textContent = 'Simpan Pengembalian';
+  }
+}
+
+// --- 15. FITUR TAHAP 5: SHIFT KASIR & REKONSILIASI KAS ---
+function getPengeluaranLabel(jenis) {
+  if (jenis === 'operasional') return 'Operasional';
+  if (jenis === 'setor_pemilik') return 'Setor ke Pemilik';
+  if (jenis === 'PENGEMBALIAN_VOID') return 'Pengembalian Void';
+  if (jenis === 'PENGEMBALIAN_BON') return 'Pengembalian Bon';
+  return jenis;
+}
+
 async function hitungDataShift(shiftId) {
   const shift = await getShiftById(shiftId);
   if (!shift) return null;
@@ -3185,12 +3263,12 @@ async function hitungDataShift(shiftId) {
   const kasirUser = allUsers.find(u => u.id === shift.kasir_id);
   const kasirNama = kasirUser ? kasirUser.nama : 'Kasir';
 
-  // Transaksi milik shift ini
-  const shiftTrx = allTrx.filter(t => t.shift_id === shiftId && t.status === 'selesai');
-  const shiftTrxIds = new Set(shiftTrx.map(t => t.id));
+  // Transaksi shift (abaikan transaksi berstatus void untuk omzet penjualan)
+  const shiftTrx = allTrx.filter(t => t.shift_id === shiftId);
+  const activeShiftTrx = shiftTrx.filter(t => t.status !== 'void');
+  const activeShiftTrxIds = new Set(activeShiftTrx.map(t => t.id));
 
-  // Pembayaran transaksi shift ini
-  const shiftPays = allPay.filter(p => shiftTrxIds.has(p.transaksi_id));
+  const shiftPays = allPay.filter(p => activeShiftTrxIds.has(p.transaksi_id));
 
   let tunaiPenjualan = 0;
   let qrisPenjualan = 0;
@@ -3203,19 +3281,19 @@ async function hitungDataShift(shiftId) {
     else if (p.metode === 'bon') bonPenjualan += nom;
   });
 
-  const totalPenjualan = shiftTrx.reduce((acc, t) => acc + (Number(t.total) || 0), 0);
+  const totalPenjualan = activeShiftTrx.reduce((acc, t) => acc + (Number(t.total) || 0), 0);
 
-  // Pembayaran bon tunai yang masuk shift ini
-  const shiftBonPays = allBonPay.filter(b => b.shift_id === shiftId);
+  // Pembayaran bon tunai yang masuk shift ini (hanya cicilan masuk, bukan pengembalian)
+  const shiftBonPays = allBonPay.filter(b => b.shift_id === shiftId && b.tipe !== 'PENGEMBALIAN');
   const tunaiBayarBon = shiftBonPays
     .filter(b => b.metode === 'tunai')
     .reduce((acc, b) => acc + (Number(b.jumlah) || 0), 0);
 
-  // Pengeluaran kas shift ini
+  // Pengeluaran kas shift ini (termasuk operasional, setor, PENGEMBALIAN_VOID, PENGEMBALIAN_BON)
   const shiftExpenses = allExpenses.filter(e => e.shift_id === shiftId);
   const totalPengeluaran = shiftExpenses.reduce((acc, e) => acc + (Number(e.jumlah) || 0), 0);
 
-  // Rumus Kas Diharapkan = Modal Awal + Tunai Jual + Tunai Bon − Pengeluaran
+  // Kas Diharapkan = Modal Awal + Tunai Jual + Tunai Bon − Seluruh Pengeluaran
   const modalAwal = Number(shift.modal_awal) || 0;
   const kasDiharapkan = modalAwal + tunaiPenjualan + tunaiBayarBon - totalPengeluaran;
 
@@ -3224,6 +3302,7 @@ async function hitungDataShift(shiftId) {
     kasirNama,
     modalAwal,
     shiftTrx,
+    activeShiftTrx,
     totalPenjualan,
     tunaiPenjualan,
     qrisPenjualan,
@@ -3287,13 +3366,12 @@ function renderActiveExpensesList(expenses) {
     return;
   }
 
-  // Tampilkan terbaru di atas
   const sorted = [...expenses].sort((a, b) => new Date(b.waktu) - new Date(a.waktu));
 
   sorted.forEach(e => {
     const d = new Date(e.waktu);
     const timeStr = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-    const jenisLabel = e.jenis === 'setor_pemilik' ? 'Setor ke Pemilik' : 'Operasional';
+    const jenisLabel = getPengeluaranLabel(e.jenis);
 
     const item = document.createElement('div');
     item.className = 'expense-item';
@@ -3371,7 +3449,6 @@ async function renderShiftHistoryList() {
   container.appendChild(fragment);
 }
 
-// Buka Detail Riwayat Shift Selesai
 async function openShiftDetail(shiftId) {
   activeDetailShiftId = shiftId;
   const calc = await hitungDataShift(shiftId);
@@ -3411,7 +3488,7 @@ async function openShiftDetail(shiftId) {
   document.getElementById('detail-shift-bayarbon-tunai').textContent = formatRp(calc.tunaiBayarBon);
   document.getElementById('detail-shift-total-pengeluaran').textContent = formatRp(calc.totalPengeluaran);
 
-  // Daftar Pengeluaran Shift
+  // Daftar Pengeluaran
   const expContainer = document.getElementById('detail-shift-pengeluaran-list');
   expContainer.innerHTML = '';
   if (calc.shiftExpenses.length === 0) {
@@ -3420,7 +3497,7 @@ async function openShiftDetail(shiftId) {
     calc.shiftExpenses.forEach(e => {
       const d = new Date(e.waktu);
       const timeStr = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-      const jenis = e.jenis === 'setor_pemilik' ? 'Setor ke Pemilik' : 'Operasional';
+      const jenis = getPengeluaranLabel(e.jenis);
       const row = document.createElement('div');
       row.className = 'expense-item';
       row.innerHTML = `
@@ -3434,20 +3511,29 @@ async function openShiftDetail(shiftId) {
     });
   }
 
-  // Tabel Transaksi Penjualan Shift
+  // Tabel Transaksi Shift (Tahap 6: dapat diketuk ke Struk)
   const trxBody = document.getElementById('detail-shift-table-transaksi');
   trxBody.innerHTML = '';
   if (calc.shiftTrx.length === 0) {
-    trxBody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Belum ada transaksi penjualan.</td></tr>';
+    trxBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Belum ada transaksi penjualan.</td></tr>';
   } else {
     calc.shiftTrx.forEach(t => {
       const d = new Date(t.waktu);
       const timeStr = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+      const isVoid = (t.status === 'void');
       const tr = document.createElement('tr');
+      tr.className = 'table-row-clickable cursor-pointer';
+      tr.onclick = () => openReceiptModal(t.id, false);
+
       tr.innerHTML = `
         <td class="text-xs text-muted">${timeStr}</td>
         <td class="font-bold text-xs">${t.nomor}</td>
-        <td class="font-bold text-amber">${formatRp(t.total)}</td>
+        <td>
+          <span class="pay-badge ${isVoid ? 'pay-badge-void' : 'pay-badge-paid'} text-xs">
+            ${isVoid ? 'VOID' : 'Selesai'}
+          </span>
+        </td>
+        <td class="font-bold ${isVoid ? 'text-muted' : 'text-amber'}">${formatRp(t.total)}</td>
       `;
       trxBody.appendChild(tr);
     });
@@ -3457,7 +3543,7 @@ async function openShiftDetail(shiftId) {
   const bonBody = document.getElementById('detail-shift-table-bayarbon');
   bonBody.innerHTML = '';
   if (calc.shiftBonPays.length === 0) {
-    bonBody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Tidak ada pembayaran bon di shift ini.</td></tr>';
+    bonBody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Tidak ada cicilan bon masuk di shift ini.</td></tr>';
   } else {
     calc.shiftBonPays.forEach(b => {
       const d = new Date(b.waktu);
@@ -3475,7 +3561,6 @@ async function openShiftDetail(shiftId) {
   showView('view-shift-detail');
 }
 
-// Buka Modal Tambah Pengeluaran
 function openPengeluaranModal() {
   if (!activeShiftCalculation || !activeShiftCalculation.shift) {
     alert('Tidak ada shift aktif!');
@@ -3486,7 +3571,6 @@ function openPengeluaranModal() {
   document.getElementById('input-pengeluaran-jumlah').focus();
 }
 
-// Simpan Pengeluaran Kas
 async function eksekusiSimpanPengeluaran(e) {
   e.preventDefault();
   if (!activeShiftCalculation || !activeShiftCalculation.shift) return;
@@ -3527,7 +3611,6 @@ async function eksekusiSimpanPengeluaran(e) {
   await renderShiftScreen();
 }
 
-// Buka Modal Tutup Shift
 function openTutupShiftModal() {
   if (!activeShiftCalculation || !activeShiftCalculation.shift) {
     alert('Tidak ada shift aktif!');
@@ -3542,7 +3625,6 @@ function openTutupShiftModal() {
   inputAktual.value = '';
 
   updateTutupShiftSelisihUI();
-
   document.getElementById('modal-tutup-shift').classList.remove('hidden');
   inputAktual.focus();
 }
@@ -3580,7 +3662,6 @@ function updateTutupShiftSelisihUI() {
   }
 }
 
-// Konfirmasi Tutup Shift
 async function eksekusiTutupShift(e) {
   e.preventDefault();
   if (!activeShiftCalculation || !activeShiftCalculation.shift) return;
@@ -3637,7 +3718,7 @@ async function eksekusiTutupShift(e) {
   renderDashboard();
 }
 
-// --- 12C. FITUR TAHAP 5: LAPORAN PENJUALAN HARIAN ---
+// --- 16. FITUR TAHAP 5 & 6: LAPORAN PENJUALAN HARIAN ---
 async function renderLaporanScreen(targetDateStr = null) {
   if (!currentUser || currentUser.peran !== 'pemilik') {
     alert('Akses khusus Pemilik!');
@@ -3661,9 +3742,8 @@ async function renderLaporanScreen(targetDateStr = null) {
     getAllVoidTransaksi()
   ]);
 
-  // Filter transaksi pada tanggal target (WIB)
+  // Semua transaksi pada hari tersebut (termasuk yang void untuk riwayat)
   const dayTrx = allTrx.filter(t => {
-    if (t.status !== 'selesai') return false;
     const dStr = getJakartaISODateString(new Date(t.waktu));
     return dStr === targetDateStr;
   });
@@ -3681,26 +3761,23 @@ async function renderLaporanScreen(targetDateStr = null) {
   emptyBox.classList.add('hidden');
   contentBox.classList.remove('hidden');
 
-  const dayTrxIds = new Set(dayTrx.map(t => t.id));
+  // Transaksi aktif (non-void) vs transaksi void hari itu
+  const activeDayTrx = dayTrx.filter(t => t.status !== 'void');
+  const voidDayTrx = dayTrx.filter(t => t.status === 'void');
 
-  // Penjualan Kotor = Σ total transaksi selesai
   const penjualanKotor = dayTrx.reduce((acc, t) => acc + (Number(t.total) || 0), 0);
-
-  // Total Void hari itu (dari store void_transaksi, saat ini 0)
-  const dayVoids = allVoids.filter(v => {
-    const dStr = getJakartaISODateString(new Date(v.waktu));
-    return dStr === targetDateStr;
-  });
-  const totalVoid = dayVoids.reduce((acc, v) => acc + (Number(v.total_void) || 0), 0);
+  const totalVoid = voidDayTrx.reduce((acc, t) => acc + (Number(t.total) || 0), 0);
   const penjualanBersih = penjualanKotor - totalVoid;
 
   document.getElementById('laporan-penjualan-bersih').textContent = formatRp(penjualanBersih);
   document.getElementById('laporan-penjualan-kotor').textContent = formatRp(penjualanKotor);
   document.getElementById('laporan-total-void').textContent = formatRp(totalVoid);
-  document.getElementById('laporan-total-transaksi').textContent = `${dayTrx.length} transaksi`;
+  document.getElementById('laporan-total-transaksi').textContent = `${activeDayTrx.length} aktif (${dayTrx.length} total)`;
 
-  // Rincian Pembayaran Transaksi Hari Itu
-  const dayPays = allPays.filter(p => dayTrxIds.has(p.transaksi_id));
+  // Pembayaran transaksi aktif hari itu
+  const activeTrxIds = new Set(activeDayTrx.map(t => t.id));
+  const dayPays = allPays.filter(p => activeTrxIds.has(p.transaksi_id));
+
   let payTunai = 0;
   let payQris = 0;
   let payBon = 0;
@@ -3716,10 +3793,10 @@ async function renderLaporanScreen(targetDateStr = null) {
   document.getElementById('laporan-pay-qris').textContent = formatRp(payQris);
   document.getElementById('laporan-pay-bon').textContent = formatRp(payBon);
 
-  // Pembayaran Bon yang Diterima Hari Ini (Bukan Omzet, tapi arus kas masuk)
+  // Cicilan bon yang diterima hari ini (Bukan omzet)
   const dayBonPays = allBonPays.filter(b => {
     const dStr = getJakartaISODateString(new Date(b.waktu));
-    return dStr === targetDateStr;
+    return dStr === targetDateStr && b.tipe !== 'PENGEMBALIAN';
   });
 
   let bonBayarTunai = 0;
@@ -3734,8 +3811,8 @@ async function renderLaporanScreen(targetDateStr = null) {
   document.getElementById('laporan-bon-tunai').textContent = formatRp(bonBayarTunai);
   document.getElementById('laporan-bon-qris').textContent = formatRp(bonBayarQris);
 
-  // 5 Produk Terlaris Hari Ini
-  const dayItems = allItems.filter(i => dayTrxIds.has(i.transaksi_id));
+  // 5 Produk Terlaris Hari Ini (hanya transaksi aktif)
+  const dayItems = allItems.filter(i => activeTrxIds.has(i.transaksi_id));
   const productAgg = {};
 
   dayItems.forEach(i => {
@@ -3758,7 +3835,7 @@ async function renderLaporanScreen(targetDateStr = null) {
   topListContainer.innerHTML = '';
 
   if (sortedTopProds.length === 0) {
-    topListContainer.innerHTML = '<div class="text-xs text-muted text-center" style="padding: 8px;">Tidak ada rincian item.</div>';
+    topListContainer.innerHTML = '<div class="text-xs text-muted text-center" style="padding: 8px;">Tidak ada transaksi aktif hari ini.</div>';
   } else {
     sortedTopProds.forEach((p, idx) => {
       const row = document.createElement('div');
@@ -3775,7 +3852,31 @@ async function renderLaporanScreen(targetDateStr = null) {
     });
   }
 
-  // Tombol Share WhatsApp
+  // Render Daftar Transaksi Hari Ini (Tahap 6: diketuk ke Struk & Void)
+  const trxListBody = document.getElementById('table-laporan-transaksi-list');
+  trxListBody.innerHTML = '';
+
+  dayTrx.sort((a, b) => new Date(b.waktu) - new Date(a.waktu));
+
+  dayTrx.forEach(t => {
+    const isVoid = (t.status === 'void');
+    const tr = document.createElement('tr');
+    tr.className = 'table-row-clickable cursor-pointer';
+    tr.onclick = () => openReceiptModal(t.id, false);
+
+    tr.innerHTML = `
+      <td class="text-xs text-muted">${formatJamWIB(t.waktu)}</td>
+      <td class="font-bold text-xs">${t.nomor}</td>
+      <td>
+        <span class="pay-badge ${isVoid ? 'pay-badge-void' : 'pay-badge-paid'} text-xs">
+          ${isVoid ? 'VOID' : 'Selesai'}
+        </span>
+      </td>
+      <td class="font-bold ${isVoid ? 'text-muted' : 'text-amber'}">${formatRp(t.total)}</td>
+    `;
+    trxListBody.appendChild(tr);
+  });
+
   const btnShareWA = document.getElementById('btn-share-wa-laporan');
   btnShareWA.onclick = async () => {
     const warungName = (await getPengaturan('nama_warung')) || 'WarungKas';
@@ -3786,7 +3887,9 @@ async function renderLaporanScreen(targetDateStr = null) {
       `Tanggal: ${targetDateStr}\n` +
       `--------------------------------\n` +
       `• Penjualan Bersih: ${formatRp(penjualanBersih)}\n` +
-      `• Jumlah Transaksi: ${dayTrx.length}\n` +
+      `• Penjualan Kotor: ${formatRp(penjualanKotor)}\n` +
+      `• Total Void: ${formatRp(totalVoid)}\n` +
+      `• Transaksi Aktif: ${activeDayTrx.length}\n` +
       `• Rincian Penjualan:\n` +
       `  - Tunai: ${formatRp(payTunai)}\n` +
       `  - QRIS: ${formatRp(payQris)}\n` +
@@ -3804,10 +3907,375 @@ async function renderLaporanScreen(targetDateStr = null) {
   showView('view-laporan');
 }
 
+// --- 17. TAHAP 6: CADANGAN DATA / EKSPOR (PRD §7 + AMENDEMEN v1.3) ---
+async function kumpulkanSeluruhDataCadangan() {
+  const backupTables = {};
 
-// --- 13. EVENT LISTENERS ---
+  await Promise.all(ALL_STORES.map(storeName => {
+    return new Promise((resolve, reject) => {
+      const tx = dbInstance.transaction([storeName], 'readonly');
+      const store = tx.objectStore(storeName);
+      const req = store.getAll();
+      req.onsuccess = () => {
+        backupTables[storeName] = req.result || [];
+        resolve();
+      };
+      req.onerror = () => reject(req.error);
+    });
+  }));
+
+  const warungNama = (await getPengaturan('nama_warung')) || 'WarungKas';
+  const nowIso = new Date().toISOString();
+
+  return {
+    format: 'warungkas-backup',
+    versi_skema: DB_VERSION,
+    diekspor_pada: nowIso,
+    warung: {
+      nama: warungNama
+    },
+    tabel: backupTables
+  };
+}
+
+function openExportModal() {
+  if (!currentUser || currentUser.peran !== 'pemilik') {
+    alert('Akses khusus Pemilik!');
+    return;
+  }
+  document.getElementById('form-export-data').reset();
+  document.getElementById('export-error-msg').classList.add('hidden');
+  updateExportModeUI();
+  document.getElementById('modal-export').classList.remove('hidden');
+}
+
+function updateExportModeUI() {
+  const mode = document.querySelector('input[name="export-mode"]:checked')?.value || 'encrypted';
+  const encSec = document.getElementById('export-encrypted-section');
+  const plainWarn = document.getElementById('export-plain-warning');
+
+  if (mode === 'encrypted') {
+    encSec.classList.remove('hidden');
+    plainWarn.classList.add('hidden');
+    document.getElementById('input-export-password').required = true;
+    document.getElementById('input-export-password-confirm').required = true;
+  } else {
+    encSec.classList.add('hidden');
+    plainWarn.classList.remove('hidden');
+    document.getElementById('input-export-password').required = false;
+    document.getElementById('input-export-password-confirm').required = false;
+  }
+}
+
+async function eksekusiUnduhCadangan(e) {
+  e.preventDefault();
+  if (!currentUser || currentUser.peran !== 'pemilik') return;
+
+  const errBox = document.getElementById('export-error-msg');
+  errBox.classList.add('hidden');
+
+  const pin = document.getElementById('input-export-pin-pemilik').value;
+  const pinValid = await verifyOwnerReAuth(pin);
+  if (!pinValid) {
+    errBox.textContent = 'PIN Pemilik salah! Otorisasi ekspor ditolak.';
+    errBox.classList.remove('hidden');
+    return;
+  }
+
+  const mode = document.querySelector('input[name="export-mode"]:checked')?.value || 'encrypted';
+  let password = '';
+
+  if (mode === 'encrypted') {
+    password = document.getElementById('input-export-password').value;
+    const confirmPass = document.getElementById('input-export-password-confirm').value;
+
+    if (password.length < 8) {
+      errBox.textContent = 'Kata sandi minimal 8 karakter!';
+      errBox.classList.remove('hidden');
+      return;
+    }
+    if (password !== confirmPass) {
+      errBox.textContent = 'Konfirmasi kata sandi tidak cocok!';
+      errBox.classList.remove('hidden');
+      return;
+    }
+  }
+
+  const btnSubmit = document.getElementById('btn-submit-export');
+  btnSubmit.disabled = true;
+  btnSubmit.textContent = 'Menyiapkan Cadangan...';
+
+  try {
+    const rawBackup = await kumpulkanSeluruhDataCadangan();
+    const dateKey = getJakartaDateKey();
+    const dNow = new Date();
+    const timeKey = `${dNow.getHours().toString().padStart(2, '0')}${dNow.getMinutes().toString().padStart(2, '0')}`;
+    const filename = `warungkas-cadangan-${dateKey}-${timeKey}.json`;
+
+    let finalJsonString = '';
+
+    if (mode === 'plain') {
+      finalJsonString = JSON.stringify(rawBackup, null, 2);
+    } else {
+      // Mode Terenkripsi AES-GCM (Amendemen v1.3)
+      btnSubmit.textContent = 'Mengenkripsi Data...';
+      const iterations = await calibrateIterations();
+      const salt = crypto.getRandomValues(new Uint8Array(16));
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+
+      const aesKey = await deriveAesKey(password, salt, iterations);
+      const enc = new TextEncoder();
+      const plaintextBuffer = enc.encode(JSON.stringify(rawBackup));
+
+      const ciphertextBuffer = await crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv: iv },
+        aesKey,
+        plaintextBuffer
+      );
+
+      const encryptedEnvelope = {
+        format: 'warungkas-backup-encrypted',
+        versi_format: 1,
+        algoritma: 'AES-GCM',
+        kdf: {
+          nama: 'PBKDF2',
+          hash: 'SHA-256',
+          iterasi: iterations,
+          salt_b64: bufToBase64(salt)
+        },
+        iv_b64: bufToBase64(iv),
+        data_b64: bufToBase64(ciphertextBuffer)
+      };
+
+      finalJsonString = JSON.stringify(encryptedEnvelope, null, 2);
+    }
+
+    const blob = new Blob([finalJsonString], { type: 'application/json' });
+    downloadFile(blob, filename);
+
+    const nowIso = new Date().toISOString();
+    await setPengaturan('cadangan_terakhir', nowIso);
+
+    await catatLog(currentUser.id, 'EKSPOR_DATA', 'pengaturan', {
+      mode: mode,
+      berkas: filename
+    });
+
+    document.getElementById('modal-export').classList.add('hidden');
+    btnSubmit.disabled = false;
+    btnSubmit.textContent = 'Unduh Cadangan';
+
+    alert(`Cadangan data berhasil diunduh:\n${filename}`);
+    await updateDashboardBackupReminder();
+    const labelBackup = document.getElementById('pengaturan-cadangan-terakhir');
+    if (labelBackup) {
+      labelBackup.textContent = `${formatTanggalWIB(nowIso)} • ${formatJamWIB(nowIso)}`;
+    }
+
+  } catch (err) {
+    console.error('Ekspor gagal:', err);
+    errBox.textContent = 'Terjadi kesalahan saat memproses ekspor.';
+    errBox.classList.remove('hidden');
+    btnSubmit.disabled = false;
+    btnSubmit.textContent = 'Unduh Cadangan';
+  }
+}
+
+// --- 18. TAHAP 6: PULIHKAN / IMPOR DATA (PRD §7.3 — GAGAL AMAN) ---
+function openImportModal() {
+  if (!currentUser || currentUser.peran !== 'pemilik') {
+    alert('Akses khusus Pemilik!');
+    return;
+  }
+
+  pendingImportData = null;
+  document.getElementById('input-import-file').value = '';
+  document.getElementById('input-import-password').value = '';
+  document.getElementById('input-import-pin-pemilik').value = '';
+  document.getElementById('import-password-box').classList.add('hidden');
+  document.getElementById('import-error-msg').classList.add('hidden');
+
+  document.getElementById('import-step-file').classList.remove('hidden');
+  document.getElementById('import-step-confirm').classList.add('hidden');
+
+  document.getElementById('modal-import').classList.remove('hidden');
+}
+
+async function periksaBerkasImpor() {
+  const errBox = document.getElementById('import-error-msg');
+  errBox.classList.add('hidden');
+
+  const fileInput = document.getElementById('input-import-file');
+  if (!fileInput.files || fileInput.files.length === 0) {
+    errBox.textContent = 'Silakan pilih berkas cadangan (.json) terlebih dahulu!';
+    errBox.classList.remove('hidden');
+    return;
+  }
+
+  const pin = document.getElementById('input-import-pin-pemilik').value;
+  const pinValid = await verifyOwnerReAuth(pin);
+  if (!pinValid) {
+    errBox.textContent = 'PIN Pemilik saat ini salah!';
+    errBox.classList.remove('hidden');
+    return;
+  }
+
+  const file = fileInput.files[0];
+  const fileText = await file.text();
+
+  let parsed = null;
+  try {
+    parsed = JSON.parse(fileText);
+  } catch (e) {
+    errBox.textContent = 'Format berkas rusak atau bukan JSON yang valid!';
+    errBox.classList.remove('hidden');
+    return;
+  }
+
+  let finalPayload = null;
+
+  // Deteksi Format: Terenkripsi vs Polos
+  if (parsed.format === 'warungkas-backup-encrypted') {
+    const passBox = document.getElementById('import-password-box');
+    passBox.classList.remove('hidden');
+    const password = document.getElementById('input-import-password').value;
+
+    if (!password) {
+      errBox.textContent = 'Berkas terenkripsi! Masukkan kata sandi berkas cadangan.';
+      errBox.classList.remove('hidden');
+      return;
+    }
+
+    try {
+      const saltBuf = base64ToBuf(parsed.kdf.salt_b64);
+      const ivBuf = base64ToBuf(parsed.iv_b64);
+      const dataBuf = base64ToBuf(parsed.data_b64);
+      const iterations = Number(parsed.kdf.iterasi) || 100000;
+
+      const aesKey = await deriveAesKey(password, saltBuf, iterations);
+      const decryptedBuf = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: ivBuf },
+        aesKey,
+        dataBuf
+      );
+
+      const dec = new TextDecoder();
+      finalPayload = JSON.parse(dec.decode(decryptedBuf));
+    } catch (decErr) {
+      console.error('Dekripsi gagal:', decErr);
+      errBox.textContent = 'Kata sandi cadangan salah atau berkas rusak! Dekripsi ditolak (Gagal Aman).';
+      errBox.classList.remove('hidden');
+      return;
+    }
+  } else if (parsed.format === 'warungkas-backup') {
+    finalPayload = parsed;
+  } else {
+    errBox.textContent = 'Berkas bukan format cadangan WarungKas yang sah!';
+    errBox.classList.remove('hidden');
+    return;
+  }
+
+  // Validasi Skema & Struktur
+  if (finalPayload.versi_skema !== DB_VERSION || !finalPayload.tabel) {
+    errBox.textContent = `Versi skema cadangan (${finalPayload.versi_skema}) tidak cocok dengan sistem saat ini (${DB_VERSION}). Pemulihan dibatalkan.`;
+    errBox.classList.remove('hidden');
+    return;
+  }
+
+  // Validasi Toko Kasir Minimal Memiliki 1 Pemilik
+  const kasirList = finalPayload.tabel.kasir || [];
+  const hasOwner = kasirList.some(k => k.peran === 'pemilik');
+  if (!hasOwner) {
+    errBox.textContent = 'Berkas cadangan tidak memiliki akun Pemilik. Berkas tidak sah.';
+    errBox.classList.remove('hidden');
+    return;
+  }
+
+  pendingImportData = finalPayload;
+
+  // Tampilkan Pratinjau di Step Konfirmasi
+  document.getElementById('import-preview-warung').textContent = finalPayload.warung?.nama || 'WarungKas';
+  document.getElementById('import-preview-date').textContent = `${formatTanggalWIB(finalPayload.diekspor_pada)} ${formatJamWIB(finalPayload.diekspor_pada)}`;
+  document.getElementById('import-preview-products').textContent = `${(finalPayload.tabel.produk || []).length} item`;
+  document.getElementById('import-preview-trx').textContent = `${(finalPayload.tabel.transaksi || []).length} transaksi`;
+  document.getElementById('import-preview-bon').textContent = `${(finalPayload.tabel.pelanggan_bon || []).length} orang`;
+
+  document.getElementById('import-step-file').classList.add('hidden');
+  document.getElementById('import-step-confirm').classList.remove('hidden');
+}
+
+async function eksekusiGantiSeluruhData() {
+  if (!pendingImportData) return;
+
+  const btnSubmit = document.getElementById('btn-execute-import');
+  btnSubmit.disabled = true;
+  btnSubmit.textContent = 'Membuat Pengaman...';
+
+  try {
+    // 1. Buat & Unduh Cadangan Pengaman Otomatis Sebelum Ditimpa
+    const safetyBackup = await kumpulkanSeluruhDataCadangan();
+    const dateKey = getJakartaDateKey();
+    const dNow = new Date();
+    const timeKey = `${dNow.getHours().toString().padStart(2, '0')}${dNow.getMinutes().toString().padStart(2, '0')}`;
+    const safetyFilename = `warungkas-pengaman-${dateKey}-${timeKey}.json`;
+
+    const safetyBlob = new Blob([JSON.stringify(safetyBackup, null, 2)], { type: 'application/json' });
+    downloadFile(safetyBlob, safetyFilename);
+
+    btnSubmit.textContent = 'Menimpa Basis Data...';
+
+    // 2. Timpa dalam SATU Transaksi IndexedDB (Kosongkan lalu Isi)
+    const tx = dbInstance.transaction(ALL_STORES, 'readwrite');
+
+    for (const storeName of ALL_STORES) {
+      const store = tx.objectStore(storeName);
+      store.clear();
+
+      const records = pendingImportData.tabel[storeName] || [];
+      for (const rec of records) {
+        store.put(rec);
+      }
+    }
+
+    tx.oncomplete = async () => {
+      // 3. Verifikasi Jumlah
+      const importedProducts = (pendingImportData.tabel.produk || []).length;
+      const importedTrx = (pendingImportData.tabel.transaksi || []).length;
+      const importedBon = (pendingImportData.tabel.pelanggan_bon || []).length;
+
+      alert(
+        `Pemulihan Berhasil!\n` +
+        `Data pengaman diunduh: ${safetyFilename}\n` +
+        `Data aktif sekarang:\n` +
+        `• Produk: ${importedProducts}\n` +
+        `• Transaksi: ${importedTrx}\n` +
+        `• Pelanggan Bon: ${importedBon}\n\n` +
+        `Sesi akan diakhiri. Silakan login kembali dengan PIN dari data cadangan.`
+      );
+
+      // Hapus sesi tersimpan & muat ulang aplikasi
+      localStorage.removeItem('wk_session_user_id');
+      window.location.reload();
+    };
+
+    tx.onerror = (e) => {
+      console.error('Pemulihan gagal (Rollback):', e.target.error);
+      alert('Gagal memulihkan data! Basis data lama tetap utuh.');
+      btnSubmit.disabled = false;
+      btnSubmit.textContent = 'Ganti Data Sekarang';
+    };
+
+  } catch (err) {
+    console.error('Error saat pemulihan:', err);
+    alert('Terjadi kesalahan fatal saat pemulihan data.');
+    btnSubmit.disabled = false;
+    btnSubmit.textContent = 'Ganti Data Sekarang';
+  }
+}
+
+// --- 19. EVENT LISTENERS LENGKAP ---
 function setupEventListeners() {
-  // Setup Awal Form
+  // Form Setup
   document.getElementById('form-setup').addEventListener('submit', async (e) => {
     e.preventDefault();
     const namaWarung = document.getElementById('setup-nama-warung').value.trim();
@@ -3857,7 +4325,7 @@ function setupEventListeners() {
     renderDashboard();
   });
 
-  // Keypad PIN Login
+  // Keypad PIN
   document.querySelectorAll('#login-keypad .btn-key').forEach(btn => {
     btn.addEventListener('click', () => {
       const lockout = getLockoutState();
@@ -3910,7 +4378,6 @@ function setupEventListeners() {
     if (isMatch) {
       resetFailedAttempts();
       currentUser = user;
-      // Simpan sesi login agar refresh/buka ulang aplikasi tidak perlu login lagi
       localStorage.setItem('wk_session_user_id', user.id);
       currentEnteredPin = '';
       updatePinDots();
@@ -3933,7 +4400,7 @@ function setupEventListeners() {
     }
   });
 
-  // Tombol Keluar (Logout)
+  // Logout
   document.getElementById('btn-logout').addEventListener('click', () => {
     if (currentUser) {
       catatLog(currentUser.id, 'LOGOUT', 'kasir', {});
@@ -3941,16 +4408,20 @@ function setupEventListeners() {
     currentUser = null;
     currentShift = null;
     currentEnteredPin = '';
-    // Hapus sesi tersimpan: setelah Keluar, login PIN wajib lagi
     localStorage.removeItem('wk_session_user_id');
     renderLoginScreen();
   });
 
-  // Navigasi ke Modul Kasir POS (Tahap 3)
+  // Tombol Cadangkan di Dashboard
+  document.getElementById('btn-dash-cadangkan').addEventListener('click', () => {
+    renderPengaturanScreen();
+    openExportModal();
+  });
+
+  // Modul Kasir
   document.getElementById('menu-kasir').addEventListener('click', enterKasirModule);
   document.getElementById('btn-kasir-back').addEventListener('click', renderDashboard);
 
-  // Filter Kategori Kasir
   document.querySelectorAll('#chips-kasir-kategori .chip').forEach(chip => {
     chip.addEventListener('click', () => {
       document.querySelectorAll('#chips-kasir-kategori .chip').forEach(c => c.classList.remove('active'));
@@ -3960,13 +4431,12 @@ function setupEventListeners() {
     });
   });
 
-  // Pencarian Kasir Realtime
   document.getElementById('input-kasir-search').addEventListener('input', (e) => {
     currentKasirSearch = e.target.value;
     renderKasirProductGrid();
   });
 
-  // Stepper Unit Picker Modal
+  // Stepper Unit Picker
   document.getElementById('btn-picker-minus').addEventListener('click', () => {
     const input = document.getElementById('input-picker-qty');
     const val = Math.max(1, parseInt(input.value || '1', 10) - 1);
@@ -3990,7 +4460,7 @@ function setupEventListeners() {
 
   document.getElementById('btn-picker-add').addEventListener('click', addActivePickerToCart);
 
-  // Keranjang Bottom Bar & Cart Modal
+  // Keranjang
   document.getElementById('btn-open-cart').addEventListener('click', () => {
     document.getElementById('modal-cart').classList.remove('hidden');
   });
@@ -3999,25 +4469,18 @@ function setupEventListeners() {
     document.getElementById('modal-cart').classList.add('hidden');
   });
 
-  document.getElementById('btn-bottom-bayar').addEventListener('click', () => {
-    openPaymentModal();
-  });
-
-  document.getElementById('btn-lanjut-pembayaran').addEventListener('click', () => {
-    openPaymentModal();
-  });
-
+  document.getElementById('btn-bottom-bayar').addEventListener('click', openPaymentModal);
+  document.getElementById('btn-lanjut-pembayaran').addEventListener('click', openPaymentModal);
   document.getElementById('btn-close-payment').addEventListener('click', () => {
     document.getElementById('modal-payment').classList.add('hidden');
   });
 
-  // Input Pembayaran Listeners
+  // Input Pembayaran
   document.getElementById('input-pay-tunai-received').addEventListener('input', recalculatePaymentInvariant);
   document.getElementById('input-pay-qris').addEventListener('input', recalculatePaymentInvariant);
   document.getElementById('input-pay-bon').addEventListener('input', recalculatePaymentInvariant);
   document.getElementById('select-bon-pelanggan').addEventListener('change', recalculatePaymentInvariant);
 
-  // Tombol Pecahan Cepat Tunai
   document.querySelectorAll('.btn-quick-cash').forEach(btn => {
     btn.addEventListener('click', () => {
       const mode = btn.getAttribute('data-cash');
@@ -4027,11 +4490,9 @@ function setupEventListeners() {
       const rawBon = Math.max(0, Math.round(Number(document.getElementById('input-pay-bon').value) || 0));
       const sisa = Math.max(0, totalBill - rawQris - rawBon);
 
-      if (mode === 'pas') {
-        input.value = sisa;
-      } else if (mode === 'clear') {
-        input.value = '';
-      } else {
+      if (mode === 'pas') input.value = sisa;
+      else if (mode === 'clear') input.value = '';
+      else {
         const nominal = parseInt(mode, 10);
         const currentVal = parseInt(input.value || '0', 10);
         input.value = currentVal + nominal;
@@ -4040,27 +4501,23 @@ function setupEventListeners() {
     });
   });
 
-  // Tombol Pas QRIS
   document.getElementById('btn-pay-qris-pas').addEventListener('click', () => {
     const totalBill = cartItems.reduce((acc, item) => acc + item.subtotal, 0);
     const rawCash = Math.max(0, Math.round(Number(document.getElementById('input-pay-tunai-received').value) || 0));
     const rawBon = Math.max(0, Math.round(Number(document.getElementById('input-pay-bon').value) || 0));
-    const sisa = Math.max(0, totalBill - rawCash - rawBon);
-    document.getElementById('input-pay-qris').value = sisa;
+    document.getElementById('input-pay-qris').value = Math.max(0, totalBill - rawCash - rawBon);
     recalculatePaymentInvariant();
   });
 
-  // Tombol Pas BON
   document.getElementById('btn-pay-bon-pas').addEventListener('click', () => {
     const totalBill = cartItems.reduce((acc, item) => acc + item.subtotal, 0);
     const rawCash = Math.max(0, Math.round(Number(document.getElementById('input-pay-tunai-received').value) || 0));
     const rawQris = Math.max(0, Math.round(Number(document.getElementById('input-pay-qris').value) || 0));
-    const sisa = Math.max(0, totalBill - rawCash - rawQris);
-    document.getElementById('input-pay-bon').value = sisa;
+    document.getElementById('input-pay-bon').value = Math.max(0, totalBill - rawCash - rawQris);
     recalculatePaymentInvariant();
   });
 
-  // Tambah Pelanggan Bon Modal
+  // Tambah Pelanggan Bon
   document.getElementById('btn-tambah-pelanggan-bon').addEventListener('click', () => {
     document.getElementById('form-tambah-pelanggan-bon').reset();
     document.getElementById('modal-pelanggan-bon').classList.remove('hidden');
@@ -4075,7 +4532,6 @@ function setupEventListeners() {
     const nama = document.getElementById('input-pelanggan-nama').value.trim();
     const hp = document.getElementById('input-pelanggan-hp').value.trim();
     const alamat = document.getElementById('input-pelanggan-alamat').value.trim();
-
     if (!nama) return;
 
     const newPel = {
@@ -4095,15 +4551,9 @@ function setupEventListeners() {
     recalculatePaymentInvariant();
   });
 
-  // Submit Simpan Transaksi
   document.getElementById('btn-submit-transaksi').addEventListener('click', eksekusiSimpanTransaksi);
 
-  // Transaksi Baru Selesai
-  document.getElementById('btn-transaksi-baru').addEventListener('click', () => {
-    document.getElementById('modal-success').classList.add('hidden');
-  });
-
-  // Buka Shift Form Submit
+  // Buka Shift
   document.getElementById('form-buka-shift').addEventListener('submit', async (e) => {
     e.preventDefault();
     const modalAwal = Math.max(0, Math.round(Number(document.getElementById('input-shift-modal-awal').value) || 0));
@@ -4133,8 +4583,41 @@ function setupEventListeners() {
     renderDashboard();
   });
 
+  // Event Struk (Tahap 6)
+  document.getElementById('btn-close-receipt').addEventListener('click', () => {
+    document.getElementById('modal-receipt').classList.add('hidden');
+  });
 
-  // --- TAHAP 4: EVENT LISTENERS BUKU BON ---
+  document.getElementById('btn-receipt-new-trx').addEventListener('click', () => {
+    document.getElementById('modal-receipt').classList.add('hidden');
+  });
+
+  document.getElementById('btn-receipt-share-wa').addEventListener('click', () => {
+    if (!activeReceiptData) return;
+    const text = formatReceiptTextForWA(activeReceiptData);
+    const cleanPhone = normalizePhoneForWA(activeReceiptData.pelangganNama ? '' : '');
+    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
+  });
+
+  document.getElementById('btn-receipt-open-void').addEventListener('click', () => {
+    if (!activeReceiptData || !activeReceiptData.trx) return;
+    openVoidModal(activeReceiptData.trx);
+  });
+
+  document.getElementById('btn-mark-qris-returned').addEventListener('click', () => {
+    if (!activeReceiptData || !activeReceiptData.trx) return;
+    tandaiQrisDikembalikan(activeReceiptData.trx.id);
+  });
+
+  // Event Modal Void (Tahap 6)
+  document.getElementById('btn-close-modal-void').addEventListener('click', () => {
+    document.getElementById('modal-void').classList.add('hidden');
+  });
+
+  document.getElementById('form-void-transaksi').addEventListener('submit', eksekusiSimpanVoid);
+
+  // Buku Bon
   document.getElementById('menu-bon').addEventListener('click', renderBukuBonScreen);
   document.getElementById('btn-bon-back').addEventListener('click', renderDashboard);
 
@@ -4144,7 +4627,6 @@ function setupEventListeners() {
   });
 
   document.getElementById('btn-back-detail-bon').addEventListener('click', async () => {
-    // Kembali dari detail ke daftar: hitung ulang dari database
     await renderBukuBonScreen();
   });
 
@@ -4154,22 +4636,22 @@ function setupEventListeners() {
 
   document.getElementById('form-catat-bayar-bon').addEventListener('submit', eksekusiSimpanPembayaranBon);
 
-  // Navigasi ke Produk & Stok
-  document.getElementById('menu-produk').addEventListener('click', () => {
-    renderProductListScreen();
+  // Event Pengembalian Pembayaran Bon (Tahap 6)
+  document.getElementById('btn-close-modal-refundbon').addEventListener('click', () => {
+    document.getElementById('modal-refund-bon').classList.add('hidden');
   });
 
-  document.getElementById('btn-produk-back').addEventListener('click', () => {
-    renderDashboard();
-  });
+  document.getElementById('form-refund-bon').addEventListener('submit', eksekusiSimpanRefundBon);
 
-  // Pencarian Produk (Responsif <300ms)
+  // Produk & Stok
+  document.getElementById('menu-produk').addEventListener('click', renderProductListScreen);
+  document.getElementById('btn-produk-back').addEventListener('click', renderDashboard);
+
   document.getElementById('input-cari-produk').addEventListener('input', (e) => {
     currentSearchKeyword = e.target.value;
     filterAndRenderProducts();
   });
 
-  // Filter Kategori Chips
   document.querySelectorAll('#chips-kategori .chip').forEach(chip => {
     chip.addEventListener('click', () => {
       document.querySelectorAll('#chips-kategori .chip').forEach(c => c.classList.remove('active'));
@@ -4179,19 +4661,10 @@ function setupEventListeners() {
     });
   });
 
-  // Muat Produk Contoh
   document.getElementById('btn-muat-contoh').addEventListener('click', muatProdukContoh);
+  document.getElementById('btn-produk-tambah').addEventListener('click', () => openProductForm(null));
+  document.getElementById('btn-cancel-produk-form').addEventListener('click', renderProductListScreen);
 
-  // Navigasi Form Tambah Produk
-  document.getElementById('btn-produk-tambah').addEventListener('click', () => {
-    openProductForm(null);
-  });
-
-  document.getElementById('btn-cancel-produk-form').addEventListener('click', () => {
-    renderProductListScreen();
-  });
-
-  // Submit Simpan Produk Baru / Edit
   document.getElementById('form-produk').addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!currentUser || currentUser.peran !== 'pemilik') return;
@@ -4226,11 +4699,8 @@ function setupEventListeners() {
     if (!isEdit) {
       productRecord.dibuat_pada = new Date().toISOString();
     } else {
-      // Perbaikan Muse: pertahankan tanggal pembuatan asli saat produk diubah.
       const lama = await getProductById(prodId);
-      if (lama && lama.dibuat_pada) {
-        productRecord.dibuat_pada = lama.dibuat_pada;
-      }
+      if (lama && lama.dibuat_pada) productRecord.dibuat_pada = lama.dibuat_pada;
     }
 
     await saveProductRecord(productRecord);
@@ -4248,7 +4718,6 @@ function setupEventListeners() {
     await renderProductListScreen();
   });
 
-  // Nonaktifkan Produk (Soft Delete)
   document.getElementById('btn-nonaktifkan-produk').addEventListener('click', async () => {
     if (!currentUser || currentUser.peran !== 'pemilik') return;
     const prodId = document.getElementById('form-prod-id').value;
@@ -4257,9 +4726,7 @@ function setupEventListeners() {
     const prod = await getProductById(prodId);
     if (!prod) return;
 
-    if (!confirm(`Yakin ingin menonaktifkan produk "${prod.nama}"? Data historis transaksi & stok tetap tersimpan.`)) {
-      return;
-    }
+    if (!confirm(`Yakin ingin menonaktifkan produk "${prod.nama}"? Data historis transaksi & stok tetap tersimpan.`)) return;
 
     prod.status_aktif = false;
     prod.diubah_pada = new Date().toISOString();
@@ -4274,28 +4741,19 @@ function setupEventListeners() {
     await renderProductListScreen();
   });
 
-  // Navigasi Kembali dari Detail Produk
-  document.getElementById('btn-back-detail-produk').addEventListener('click', () => {
-    renderProductListScreen();
-  });
+  document.getElementById('btn-back-detail-produk').addEventListener('click', renderProductListScreen);
 
-  // Edit Produk dari Layar Detail
   document.getElementById('btn-edit-produk-current').addEventListener('click', async () => {
     if (!activeDetailProductId) return;
     const prod = await getProductById(activeDetailProductId);
     if (prod) openProductForm(prod);
   });
 
-  // Buka Modal Tambah Satuan
-  document.getElementById('btn-open-tambah-satuan').addEventListener('click', () => {
-    openSatuanModal(null);
-  });
-
+  document.getElementById('btn-open-tambah-satuan').addEventListener('click', () => openSatuanModal(null));
   document.getElementById('btn-close-modal-satuan').addEventListener('click', () => {
     document.getElementById('modal-satuan').classList.add('hidden');
   });
 
-  // Submit Simpan Satuan Turunan
   document.getElementById('form-satuan-jual').addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!currentUser || currentUser.peran !== 'pemilik' || !activeDetailProductId) return;
@@ -4327,16 +4785,13 @@ function setupEventListeners() {
     openProductDetail(activeDetailProductId);
   });
 
-  // Buka Modal Mutasi Stok
   document.getElementById('btn-open-kulakan').addEventListener('click', () => openMutasiModal('MASUK_KULAKAN'));
   document.getElementById('btn-open-rusak').addEventListener('click', () => openMutasiModal('RUSAK'));
   document.getElementById('btn-open-koreksi').addEventListener('click', () => openMutasiModal('KOREKSI'));
-
   document.getElementById('btn-close-modal-mutasi').addEventListener('click', () => {
     document.getElementById('modal-mutasi').classList.add('hidden');
   });
 
-  // Submit Mutasi Stok
   document.getElementById('form-mutasi-stok').addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!currentUser || currentUser.peran !== 'pemilik' || !activeDetailProductId) return;
@@ -4357,7 +4812,7 @@ function setupEventListeners() {
       delta = rawJml;
       logAksi = 'STOK_MASUK';
     } else if (jenis === 'RUSAK') {
-      delta = -rawJml; // Mengurangi stok
+      delta = -rawJml;
       logAksi = 'STOK_RUSAK';
     } else if (jenis === 'KOREKSI') {
       const arah = document.getElementById('select-koreksi-arah').value;
@@ -4377,11 +4832,10 @@ function setupEventListeners() {
     openProductDetail(activeDetailProductId);
   });
 
-  // Navigasi Pengaturan & Keluar
+  // Pengaturan
   document.getElementById('menu-pengaturan').addEventListener('click', renderPengaturanScreen);
   document.getElementById('btn-back-to-dash').addEventListener('click', renderDashboard);
 
-  // Form Update Nama Warung
   document.getElementById('form-update-warung').addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!currentUser || currentUser.peran !== 'pemilik') return;
@@ -4395,7 +4849,6 @@ function setupEventListeners() {
     refreshLogTable();
   });
 
-  // Form Tambah Kasir Baru
   document.getElementById('form-tambah-kasir').addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!currentUser || currentUser.peran !== 'pemilik') return;
@@ -4429,10 +4882,33 @@ function setupEventListeners() {
     await refreshLogTable();
   });
 
-  // --- TAHAP 5: EVENT LISTENERS SHIFT & LAPORAN ---
+  // Event Cadangan & Pemulihan Data (Tahap 6)
+  document.getElementById('btn-open-modal-export').addEventListener('click', openExportModal);
+  document.getElementById('btn-close-modal-export').addEventListener('click', () => {
+    document.getElementById('modal-export').classList.add('hidden');
+  });
+
+  document.querySelectorAll('input[name="export-mode"]').forEach(radio => {
+    radio.addEventListener('change', updateExportModeUI);
+  });
+
+  document.getElementById('form-export-data').addEventListener('submit', eksekusiUnduhCadangan);
+
+  document.getElementById('btn-open-modal-import').addEventListener('click', openImportModal);
+  document.getElementById('btn-close-modal-import').addEventListener('click', () => {
+    document.getElementById('modal-import').classList.add('hidden');
+  });
+
+  document.getElementById('btn-inspect-import').addEventListener('click', periksaBerkasImpor);
+  document.getElementById('btn-cancel-import-step').addEventListener('click', () => {
+    document.getElementById('modal-import').classList.add('hidden');
+  });
+
+  document.getElementById('btn-execute-import').addEventListener('click', eksekusiGantiSeluruhData);
+
+  // Shift & Laporan
   document.getElementById('menu-shift').addEventListener('click', renderShiftScreen);
   document.getElementById('btn-shift-back').addEventListener('click', renderDashboard);
-
   document.getElementById('btn-shift-go-kasir').addEventListener('click', enterKasirModule);
 
   document.getElementById('btn-open-modal-pengeluaran').addEventListener('click', openPengeluaranModal);
@@ -4450,20 +4926,15 @@ function setupEventListeners() {
 
   document.getElementById('btn-back-shift-detail').addEventListener('click', renderShiftScreen);
 
-  // Menu & Layar Laporan
-  document.getElementById('menu-laporan').addEventListener('click', () => {
-    renderLaporanScreen();
-  });
+  document.getElementById('menu-laporan').addEventListener('click', () => renderLaporanScreen());
   document.getElementById('btn-laporan-back').addEventListener('click', renderDashboard);
 
   document.getElementById('input-laporan-tanggal').addEventListener('change', (e) => {
-    if (e.target.value) {
-      renderLaporanScreen(e.target.value);
-    }
+    if (e.target.value) renderLaporanScreen(e.target.value);
   });
 }
 
-// --- 13. BOOTSTRAP APLIKASI ---
+// --- 20. BOOTSTRAP APLIKASI ---
 async function initApp() {
   try {
     dbInstance = await openDatabase();
@@ -4488,7 +4959,6 @@ async function initApp() {
     if (!isSetupDone || users.length === 0) {
       renderSetupScreen();
     } else {
-      // Pulihkan sesi login tersimpan (refresh tidak perlu login ulang)
       const sessionUserId = localStorage.getItem('wk_session_user_id');
       const sessionUser = sessionUserId ? users.find(u => u.id === sessionUserId && u.status_aktif !== false) : null;
       if (sessionUser) {

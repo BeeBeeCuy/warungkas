@@ -111,6 +111,17 @@
           <p class="text-muted">Pilih menu di bawah untuk operasional warung.</p>
         </div>
 
+        <!-- PERINGATAN CADANGAN DATA UNTUK PEMILIK -->
+        <div id="dash-backup-reminder" class="card mb-3 hidden role-pemilik-only">
+          <div class="flex-between">
+            <div>
+              <div class="font-bold text-xs" id="dash-backup-status-title">Status Cadangan</div>
+              <div class="text-xs text-muted" id="dash-backup-status-desc">Memeriksa status cadangan...</div>
+            </div>
+            <button type="button" id="btn-dash-cadangkan" class="btn btn-secondary btn-sm">Cadangkan</button>
+          </div>
+        </div>
+
         <div class="menu-grid">
           <!-- MENU KASIR -->
           <div class="menu-card" id="menu-kasir">
@@ -126,27 +137,28 @@
             <span class="badge-stage badge-active">Tersedia</span>
           </div>
 
-          <!-- TAHAP 4: MENU BUKU BON DIAKTIFKAN -->
+          <!-- MENU BUKU BON -->
           <div class="menu-card" id="menu-bon">
             <div class="menu-icon">📖</div>
             <div class="menu-label">Buku Bon</div>
             <span class="badge-stage badge-active">Tersedia</span>
           </div>
 
-          <!-- TAHAP 5: MENU SHIFT KASIR DIAKTIFKAN -->
+          <!-- MENU SHIFT KASIR -->
           <div class="menu-card" id="menu-shift">
             <div class="menu-icon">⏱️</div>
             <div class="menu-label">Shift Kasir</div>
             <span class="badge-stage badge-active">Tersedia</span>
           </div>
 
-          <!-- TAHAP 5: MENU LAPORAN DIAKTIFKAN (KHUSUS PEMILIK) -->
+          <!-- MENU LAPORAN (KHUSUS PEMILIK) -->
           <div class="menu-card" id="menu-laporan">
             <div class="menu-icon">📊</div>
             <div class="menu-label">Laporan</div>
             <span class="badge-stage badge-active">Tersedia</span>
           </div>
 
+          <!-- MENU PENGATURAN -->
           <div class="menu-card" id="menu-pengaturan">
             <div class="menu-icon">⚙️</div>
             <div class="menu-label">Pengaturan</div>
@@ -384,28 +396,125 @@
       </div>
     </div>
 
-    <!-- LAYAR SUKSES TRANSAKSI -->
-    <div id="modal-success" class="modal-overlay hidden">
-      <div class="modal-card text-center">
-        <div class="success-icon">✓</div>
-        <h2 class="card-title" style="font-size: 1.4rem; color: var(--success);">Transaksi Berhasil!</h2>
-        <div id="success-trx-nomor" class="font-bold text-sm text-muted mb-3">TRX-00000000-000</div>
+    <!-- MODAL: STRUK LENGKAP TRANSAKSI (TAHAP 6) -->
+    <div id="modal-receipt" class="modal-overlay hidden">
+      <div class="modal-card modal-receipt-card">
+        <div class="flex-between mb-2">
+          <span class="text-xs font-bold text-muted">Struk Belanja</span>
+          <button type="button" id="btn-close-receipt" class="btn btn-secondary btn-sm">Tutup</button>
+        </div>
 
-        <div class="card mb-3 text-left" style="background-color: var(--bg-input);">
-          <div class="flex-between mb-1">
-            <span class="text-xs text-muted">Total Belanja:</span>
-            <span id="success-total" class="font-bold text-amber">Rp 0</span>
+        <div id="receipt-paper" class="receipt-paper">
+          <div class="text-center mb-2">
+            <div id="receipt-store-name" class="receipt-brand">WarungKas</div>
+            <div id="receipt-meta" class="text-xs text-muted">TRX-000 • Kasir: -</div>
+            <div id="receipt-time" class="text-xs text-muted">-</div>
           </div>
-          <div id="success-breakdown" class="text-xs text-muted mb-2"></div>
-          <div id="success-change-row" class="flex-between pt-2" style="border-top: 1px solid var(--border-color);">
-            <span class="font-bold text-sm">Kembalian Tunai:</span>
-            <span id="success-change" class="font-bold" style="font-size: 1.15rem; color: var(--text-main);">Rp 0</span>
+
+          <div id="receipt-void-banner" class="receipt-void-banner hidden">
+            <div class="font-bold">⚠️ TRANSAKSI VOID (BATAL)</div>
+            <div id="receipt-void-meta" class="text-xs">-</div>
+          </div>
+
+          <div class="receipt-divider"></div>
+
+          <div id="receipt-items-list" class="receipt-items-list"></div>
+
+          <div class="receipt-divider"></div>
+
+          <div class="flex-between mb-1">
+            <span class="font-bold">Total Belanja</span>
+            <span id="receipt-total" class="font-bold text-amber">Rp 0</span>
+          </div>
+
+          <div id="receipt-payments-breakdown" class="receipt-payments"></div>
+
+          <div class="flex-between mt-1 pt-1" style="border-top: 1px dashed var(--border-color);">
+            <span class="text-xs text-muted">Status:</span>
+            <span id="receipt-status-chip" class="pay-badge pay-badge-paid">Lunas</span>
           </div>
         </div>
 
-        <button type="button" id="btn-transaksi-baru" class="btn btn-primary btn-block">
-          Transaksi Baru (Selesai)
-        </button>
+        <!-- TINDAKAN KHUSUS QRIS PADA TRANSAKSI VOID -->
+        <div id="receipt-qris-action-box" class="card mt-2 hidden role-pemilik-only" style="background-color: var(--bg-input);">
+          <div class="flex-between mb-1">
+            <span class="text-xs font-bold">Status Pengembalian QRIS:</span>
+            <span id="receipt-qris-status-badge" class="badge-warning text-xs">Menunggu</span>
+          </div>
+          <button type="button" id="btn-mark-qris-returned" class="btn btn-secondary btn-sm btn-block">
+            Tandai QRIS Sudah Dikembalikan
+          </button>
+        </div>
+
+        <div class="modal-actions flex-column mt-3" style="gap: 8px;">
+          <button type="button" id="btn-receipt-share-wa" class="btn btn-secondary btn-block btn-sm">
+            📲 Bagikan via WhatsApp
+          </button>
+          <button type="button" id="btn-receipt-new-trx" class="btn btn-primary btn-block btn-sm">
+            Transaksi Baru
+          </button>
+          <button type="button" id="btn-receipt-open-void" class="btn btn-danger-sm btn-block role-pemilik-only hidden" style="min-height: 38px;">
+            🛑 Void Transaksi Ini
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: VOID TRANSAKSI (TAHAP 6 - KHUSUS PEMILIK) -->
+    <div id="modal-void" class="modal-overlay hidden">
+      <div class="modal-card">
+        <h3 class="card-title text-danger mb-1">Void (Batalkan) Transaksi</h3>
+        <p class="text-xs text-muted mb-2">Membatalkan transaksi secara permanen dan mengembalikan stok fisik.</p>
+
+        <div id="void-blocked-msg" class="alert-error text-xs mb-3 hidden"></div>
+
+        <div id="void-form-container">
+          <div class="card mb-3" style="background-color: var(--bg-input);">
+            <div class="flex-between mb-1">
+              <span class="text-xs text-muted">No. Transaksi:</span>
+              <span id="void-target-nomor" class="font-bold text-xs">-</span>
+            </div>
+            <div class="flex-between mb-1">
+              <span class="text-xs text-muted">Total:</span>
+              <span id="void-target-total" class="font-bold text-amber">-</span>
+            </div>
+            <div id="void-target-breakdown" class="text-xs text-muted"></div>
+          </div>
+
+          <form id="form-void-transaksi" class="form-vertical" autocomplete="off">
+            <div class="form-group">
+              <label for="input-void-alasan">Alasan Pembatalan (Wajib) *</label>
+              <input type="text" id="input-void-alasan" class="form-input" placeholder="Contoh: Pelanggan salah beli / uang salah input" required>
+            </div>
+
+            <div class="form-group" id="group-void-cash-refund">
+              <label>Pengembalian Uang Tunai ke Pelanggan *</label>
+              <div class="flex-between" style="gap: 10px;">
+                <label class="paybon-method-opt flex-1">
+                  <input type="radio" name="void-refund-cash" value="ya" checked>
+                  <span>Ya, Kembalikan</span>
+                </label>
+                <label class="paybon-method-opt flex-1">
+                  <input type="radio" name="void-refund-cash" value="tidak">
+                  <span>Tidak</span>
+                </label>
+              </div>
+              <small id="void-shift-cash-hint" class="form-hint">Akan dicatat sebagai pengeluaran kas (Pengembalian Void) pada shift aktif.</small>
+            </div>
+
+            <div class="form-group">
+              <label for="input-void-pin-pemilik">Konfirmasi PIN Pemilik *</label>
+              <input type="password" id="input-void-pin-pemilik" class="form-input text-center" inputmode="numeric" maxlength="6" pattern="[0-9]{4,6}" placeholder="••••" required>
+            </div>
+
+            <div id="void-submit-error" class="alert-error text-xs hidden"></div>
+
+            <div class="modal-actions mt-2">
+              <button type="button" id="btn-close-modal-void" class="btn btn-secondary flex-1">Batal</button>
+              <button type="submit" id="btn-submit-void" class="btn btn-danger-sm flex-1" style="min-height: 48px; font-weight: 700;">Konfirmasi Void</button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
 
@@ -483,16 +592,16 @@
           <div id="detail-bon-list-container" class="bon-bills-list"></div>
         </div>
 
-        <!-- RIWAYAT PEMBAYARAN CICILAN PELANGGAN INI -->
+        <!-- RIWAYAT PEMBAYARAN & PENGEMBALIAN CICILAN -->
         <div class="card mb-3">
-          <h3 class="card-title mb-2">Riwayat Pembayaran / Cicilan</h3>
+          <h3 class="card-title mb-2">Riwayat Pembayaran & Pengembalian</h3>
           <div class="table-responsive">
             <table class="data-table">
               <thead>
                 <tr>
                   <th>Waktu</th>
                   <th>Transaksi</th>
-                  <th>Metode</th>
+                  <th>Jenis</th>
                   <th>Nominal</th>
                 </tr>
               </thead>
@@ -523,7 +632,7 @@
             <span id="modal-paybon-total-awal" class="text-xs">-</span>
           </div>
           <div class="flex-between mb-1">
-            <span class="text-xs text-muted">Sudah Dibayar:</span>
+            <span class="text-xs text-muted">Pembayaran Bersih:</span>
             <span id="modal-paybon-sudah-bayar" class="text-xs text-success">-</span>
           </div>
           <div class="flex-between pt-1" style="border-top: 1px solid var(--border-color);">
@@ -568,6 +677,60 @@
       </div>
     </div>
 
+    <!-- TAHAP 6: MODAL PENGEMBALIAN PEMBAYARAN BON -->
+    <div id="modal-refund-bon" class="modal-overlay hidden">
+      <div class="modal-card">
+        <h3 class="card-title text-danger mb-1">Pengembalian Pembayaran Bon</h3>
+        <p class="text-xs text-muted mb-3">Mengembalikan uang pembayaran cicilan bon yang sudah diterima kepada pelanggan.</p>
+
+        <div class="card mb-3" style="background-color: var(--bg-input);">
+          <div class="flex-between mb-1">
+            <span class="text-xs text-muted">Pelanggan:</span>
+            <span id="modal-refundbon-nama-pelanggan" class="font-bold text-sm">-</span>
+          </div>
+          <div class="flex-between mb-1">
+            <span class="text-xs text-muted">Total Bayar Historis:</span>
+            <span id="modal-refundbon-total-bayar" class="text-xs text-success">-</span>
+          </div>
+          <div class="flex-between mb-1">
+            <span class="text-xs text-muted">Pernah Dikembalikan:</span>
+            <span id="modal-refundbon-total-kembali" class="text-xs text-danger">-</span>
+          </div>
+          <div class="flex-between pt-1" style="border-top: 1px solid var(--border-color);">
+            <span class="font-bold text-xs">Maksimal Dapat Dikembalikan:</span>
+            <span id="modal-refundbon-maks-kembali" class="font-bold text-amber">Rp 0</span>
+          </div>
+        </div>
+
+        <form id="form-refund-bon" class="form-vertical" autocomplete="off">
+          <input type="hidden" id="input-refundbon-bon-id">
+
+          <div class="form-group">
+            <label for="input-refundbon-nominal">Nominal Pengembalian (Rp) *</label>
+            <input type="number" id="input-refundbon-nominal" class="form-input" min="1" step="1" placeholder="Masukkan jumlah pengembalian" required>
+            <small class="form-hint">Dikeluarkan dari kas laci shift yang sedang aktif.</small>
+          </div>
+
+          <div class="form-group">
+            <label for="input-refundbon-alasan">Alasan Pengembalian *</label>
+            <input type="text" id="input-refundbon-alasan" class="form-input" placeholder="Contoh: Transaksi salah / kelebihan bayar" required>
+          </div>
+
+          <div class="form-group">
+            <label for="input-refundbon-pin">Konfirmasi PIN Pemilik *</label>
+            <input type="password" id="input-refundbon-pin" class="form-input text-center" inputmode="numeric" maxlength="6" pattern="[0-9]{4,6}" placeholder="••••" required>
+          </div>
+
+          <div id="refundbon-error-msg" class="alert-error text-xs hidden"></div>
+
+          <div class="modal-actions mt-2">
+            <button type="button" id="btn-close-modal-refundbon" class="btn btn-secondary flex-1">Batal</button>
+            <button type="submit" id="btn-submit-refundbon" class="btn btn-danger-sm flex-1" style="min-height: 48px; font-weight: 700;">Simpan Pengembalian</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- TAHAP 5: LAYAR SHIFT KASIR -->
     <section id="view-shift" class="view hidden">
       <header class="top-nav">
@@ -577,7 +740,6 @@
       </header>
 
       <main class="content-body">
-        <!-- JIKA TIDAK ADA SHIFT AKTIF -->
         <div id="shift-no-active-box" class="card text-center mb-3 hidden">
           <div class="menu-icon mb-2">⏱️</div>
           <h3 class="font-bold mb-1">Tidak Ada Shift Aktif</h3>
@@ -585,7 +747,6 @@
           <button type="button" id="btn-shift-go-kasir" class="btn btn-primary btn-block btn-sm">Buka Kasir POS</button>
         </div>
 
-        <!-- JIKA ADA SHIFT AKTIF -->
         <div id="shift-active-box" class="mb-3 hidden">
           <div class="card mb-3 shift-hero-card">
             <div class="flex-between mb-1">
@@ -645,7 +806,6 @@
             </div>
           </div>
 
-          <!-- DAFTAR PENGELUARAN SHIFT AKTIF -->
           <div class="card mb-3">
             <div class="flex-between mb-2">
               <h3 class="card-title mb-0">Pengeluaran Kas Shift Ini</h3>
@@ -655,7 +815,6 @@
           </div>
         </div>
 
-        <!-- RIWAYAT SHIFT SEBELUMNYA -->
         <div class="card mb-3">
           <h3 class="card-title mb-2">Riwayat Shift Selesai</h3>
           <div id="shift-history-list" class="shift-history-list"></div>
@@ -778,7 +937,6 @@
           </div>
         </div>
 
-        <!-- RINCIAN ARUS KAS SHIFT -->
         <div class="card mb-3">
           <h3 class="card-title mb-2">Rincian Pembayaran & Arus Kas</h3>
           <div class="detail-grid mb-2">
@@ -805,21 +963,21 @@
           </div>
         </div>
 
-        <!-- DAFTAR PENGELUARAN SHIFT -->
         <div class="card mb-3">
           <h3 class="card-title mb-2">Daftar Pengeluaran Kas</h3>
           <div id="detail-shift-pengeluaran-list" class="expense-list"></div>
         </div>
 
-        <!-- DAFTAR TRANSAKSI SHIFT -->
         <div class="card mb-3">
           <h3 class="card-title mb-2">Transaksi Penjualan Shift</h3>
+          <p class="text-xs text-muted mb-2">Ketuk baris transaksi untuk melihat struk / rincian.</p>
           <div class="table-responsive">
             <table class="data-table">
               <thead>
                 <tr>
                   <th>Waktu</th>
                   <th>Nomor</th>
+                  <th>Status</th>
                   <th>Total</th>
                 </tr>
               </thead>
@@ -828,7 +986,6 @@
           </div>
         </div>
 
-        <!-- DAFTAR PEMBAYARAN BON SHIFT -->
         <div class="card mb-3">
           <h3 class="card-title mb-2">Cicilan/Pelunasan Bon Masuk</h3>
           <div class="table-responsive">
@@ -866,13 +1023,11 @@
           </button>
         </div>
 
-        <!-- KOTAK LAPORAN UTAMA -->
         <div id="laporan-empty-box" class="card text-center text-muted mb-3 hidden" style="padding: 30px;">
           Tidak ada transaksi pada tanggal ini.
         </div>
 
         <div id="laporan-content-box">
-          <!-- RINGKASAN OMZET -->
           <div class="card mb-3">
             <div class="text-xs text-muted mb-1">Penjualan Bersih Hari Ini</div>
             <div id="laporan-penjualan-bersih" class="report-hero-amount">Rp 0</div>
@@ -893,7 +1048,6 @@
             </div>
           </div>
 
-          <!-- RINCIAN METODE PEMBAYARAN -->
           <div class="card mb-3">
             <h3 class="card-title mb-2">Rincian Pembayaran Penjualan</h3>
             <div class="flex-between text-xs mb-2">
@@ -910,7 +1064,6 @@
             </div>
           </div>
 
-          <!-- PENERIMAAN CICILAN BON HARI INI -->
           <div class="card mb-3">
             <div class="flex-between mb-1">
               <h3 class="card-title mb-0">Penerimaan Cicilan/Pelunasan Bon</h3>
@@ -927,15 +1080,32 @@
             </div>
           </div>
 
-          <!-- 5 PRODUK TERLARIS -->
           <div class="card mb-3">
             <h3 class="card-title mb-2">5 Produk Terlaris Hari Ini</h3>
             <div id="laporan-top-produk-list" class="top-product-list"></div>
           </div>
+
+          <!-- DAFTAR TRANSAKSI HARI INI (TAHAP 6: DAPAT DIKETUK KE STRUK) -->
+          <div class="card mb-3">
+            <h3 class="card-title mb-2">Daftar Transaksi Hari Ini</h3>
+            <p class="text-xs text-muted mb-2">Ketuk transaksi untuk melihat struk / tindakan void.</p>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Waktu</th>
+                    <th>Nomor</th>
+                    <th>Status</th>
+                    <th>Total</th>
+                  </tr>
+                </thead>
+                <tbody id="table-laporan-transaksi-list"></tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </main>
     </section>
-
 
     <!-- LAYAR PRODUK & STOK -->
     <section id="view-produk" class="view hidden">
@@ -1212,6 +1382,26 @@
           </form>
         </div>
 
+        <!-- TAHAP 6: CADANGAN & PEMULIHAN DATA -->
+        <div class="card mb-4 role-pemilik-only">
+          <h3 class="card-title">Cadangan & Pemulihan Data</h3>
+          <p class="text-xs text-muted mb-3">Seluruh data WarungKas tersimpan offline di peramban ini. Ekspor cadangan secara berkala agar data aman.</p>
+
+          <div class="card mb-3" style="background-color: var(--bg-input);">
+            <div class="text-xs text-muted">Cadangan Terakhir:</div>
+            <div id="pengaturan-cadangan-terakhir" class="font-bold text-sm">Belum pernah</div>
+          </div>
+
+          <div class="flex-column" style="display: flex; gap: 10px;">
+            <button type="button" id="btn-open-modal-export" class="btn btn-primary btn-block btn-sm">
+              📤 Ekspor Cadangan Data
+            </button>
+            <button type="button" id="btn-open-modal-import" class="btn btn-secondary btn-block btn-sm">
+              📥 Pulihkan Data dari Cadangan
+            </button>
+          </div>
+        </div>
+
         <div class="card mb-4">
           <h3 class="card-title">Tambah Kasir Baru</h3>
           <form id="form-tambah-kasir" class="form-vertical" autocomplete="off">
@@ -1261,6 +1451,127 @@
         </div>
       </main>
     </section>
+
+    <!-- TAHAP 6: MODAL EKSPOR CADANGAN DATA -->
+    <div id="modal-export" class="modal-overlay hidden">
+      <div class="modal-card">
+        <h3 class="card-title mb-1">Ekspor Cadangan Data</h3>
+        <p class="text-xs text-muted mb-3">Unduh seluruh basis data WarungKas ke berkas JSON.</p>
+
+        <form id="form-export-data" class="form-vertical" autocomplete="off">
+          <div class="form-group">
+            <label>Mode Cadangan *</label>
+            <div class="flex-between" style="gap: 10px;">
+              <label class="paybon-method-opt flex-1">
+                <input type="radio" name="export-mode" value="encrypted" checked>
+                <span>🔒 Terenkripsi</span>
+              </label>
+              <label class="paybon-method-opt flex-1">
+                <input type="radio" name="export-mode" value="plain">
+                <span>📄 Polos</span>
+              </label>
+            </div>
+          </div>
+
+          <div id="export-encrypted-section" class="form-vertical">
+            <div class="form-group">
+              <label for="input-export-password">Kata Sandi Enkripsi (Min. 8 Karakter) *</label>
+              <input type="password" id="input-export-password" class="form-input" placeholder="Masukkan kata sandi">
+              <small class="form-hint">Kata sandi TIDAK disimpan. Jangan sampai lupa!</small>
+            </div>
+            <div class="form-group">
+              <label for="input-export-password-confirm">Ulangi Kata Sandi *</label>
+              <input type="password" id="input-export-password-confirm" class="form-input" placeholder="Ulangi kata sandi">
+            </div>
+          </div>
+
+          <div id="export-plain-warning" class="alert-warning text-xs hidden">
+            ⚠️ <strong>Peringatan Keamanan:</strong> Berkas polos berisi data pelanggan, sisa bon, dan hash PIN. Simpan di media aman dan jangan disebarkan sembarangan!
+          </div>
+
+          <div class="form-group">
+            <label for="input-export-pin-pemilik">Verifikasi PIN Pemilik *</label>
+            <input type="password" id="input-export-pin-pemilik" class="form-input text-center" inputmode="numeric" maxlength="6" pattern="[0-9]{4,6}" placeholder="••••" required>
+          </div>
+
+          <div id="export-error-msg" class="alert-error text-xs hidden"></div>
+
+          <div class="modal-actions mt-2">
+            <button type="button" id="btn-close-modal-export" class="btn btn-secondary flex-1">Batal</button>
+            <button type="submit" id="btn-submit-export" class="btn btn-primary flex-1">Unduh Cadangan</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- TAHAP 6: MODAL PULIHKAN DATA -->
+    <div id="modal-import" class="modal-overlay hidden">
+      <div class="modal-card">
+        <h3 class="card-title text-danger mb-1">Pulihkan Data dari Cadangan</h3>
+        <p class="text-xs text-muted mb-3">Mengganti seluruh data warung di perangkat ini dengan isi berkas cadangan.</p>
+
+        <!-- STEP 1: PILIH BERKAS -->
+        <div id="import-step-file" class="form-vertical">
+          <div class="form-group">
+            <label for="input-import-file">Pilih Berkas Cadangan (.json) *</label>
+            <input type="file" id="input-import-file" class="form-input" accept=".json">
+          </div>
+
+          <div id="import-password-box" class="form-group hidden">
+            <label for="input-import-password">Berkas Terenkripsi — Masukkan Kata Sandi *</label>
+            <input type="password" id="input-import-password" class="form-input" placeholder="Kata sandi saat ekspor">
+          </div>
+
+          <div class="form-group">
+            <label for="input-import-pin-pemilik">Verifikasi PIN Pemilik Saat Ini *</label>
+            <input type="password" id="input-import-pin-pemilik" class="form-input text-center" inputmode="numeric" maxlength="6" pattern="[0-9]{4,6}" placeholder="••••">
+          </div>
+
+          <div id="import-error-msg" class="alert-error text-xs hidden"></div>
+
+          <div class="modal-actions mt-2">
+            <button type="button" id="btn-close-modal-import" class="btn btn-secondary flex-1">Batal</button>
+            <button type="button" id="btn-inspect-import" class="btn btn-primary flex-1">Periksa Berkas</button>
+          </div>
+        </div>
+
+        <!-- STEP 2: KONFIRMASI GANTI SELURUH DATA -->
+        <div id="import-step-confirm" class="form-vertical hidden">
+          <div class="alert-warning text-xs">
+            ⚠️ <strong>Perhatian:</strong> Pemulihan akan <strong>MENGGANTI SELURUH DATA</strong> pada perangkat ini. Cadangan pengaman otomatis dari kondisi saat ini akan diunduh terlebih dahulu.
+          </div>
+
+          <div class="card" style="background-color: var(--bg-input);">
+            <div class="text-xs font-bold mb-1 text-muted">Ringkasan Isi Berkas Cadangan:</div>
+            <div class="flex-between text-xs mb-1">
+              <span>Nama Warung:</span>
+              <strong id="import-preview-warung">-</strong>
+            </div>
+            <div class="flex-between text-xs mb-1">
+              <span>Tanggal Ekspor:</span>
+              <span id="import-preview-date">-</span>
+            </div>
+            <div class="flex-between text-xs mb-1">
+              <span>Jumlah Produk:</span>
+              <strong id="import-preview-products">0</strong>
+            </div>
+            <div class="flex-between text-xs mb-1">
+              <span>Jumlah Transaksi:</span>
+              <strong id="import-preview-trx">0</strong>
+            </div>
+            <div class="flex-between text-xs">
+              <span>Pelanggan Bon:</span>
+              <strong id="import-preview-bon">0</strong>
+            </div>
+          </div>
+
+          <div class="modal-actions mt-2">
+            <button type="button" id="btn-cancel-import-step" class="btn btn-secondary flex-1">Batal</button>
+            <button type="button" id="btn-execute-import" class="btn btn-danger-sm flex-1" style="min-height: 48px; font-weight: 700;">Ganti Data Sekarang</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
   </div>
 

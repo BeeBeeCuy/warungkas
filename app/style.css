@@ -230,6 +230,7 @@ label {
   padding: 4px 8px;
   font-size: 0.75rem;
   border-radius: 6px;
+  cursor: pointer;
 }
 
 .btn-success-sm {
@@ -240,6 +241,7 @@ label {
   padding: 4px 8px;
   font-size: 0.75rem;
   border-radius: 6px;
+  cursor: pointer;
 }
 
 /* --- ALERT & MESSAGES --- */
@@ -357,7 +359,7 @@ label {
 }
 
 .welcome-banner {
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .welcome-banner h2 {
@@ -392,16 +394,6 @@ label {
   transform: scale(0.97);
 }
 
-.menu-card-disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-  filter: grayscale(40%);
-}
-
-.menu-card-disabled:active {
-  transform: none;
-}
-
 .menu-icon {
   font-size: 2rem;
 }
@@ -430,7 +422,7 @@ label {
   border: 1px solid var(--primary);
 }
 
-/* --- PRODUK & KATALOG LIST (TAHAP 2) --- */
+/* --- PRODUK & KATALOG LIST --- */
 .category-chips {
   display: flex;
   gap: 8px;
@@ -623,6 +615,10 @@ label {
   gap: 10px;
 }
 
+.flex-column {
+  flex-direction: column;
+}
+
 /* --- TABEL DATA --- */
 .table-responsive {
   width: 100%;
@@ -648,9 +644,18 @@ label {
   border-bottom: 1px solid rgba(71, 85, 105, 0.4);
 }
 
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.table-row-clickable:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
 /* --- UTILITIES --- */
 .flex-1 { flex: 1; }
 .flex-between { display: flex; justify-content: space-between; align-items: center; }
+.mt-1 { margin-top: 4px; }
 .mt-2 { margin-top: 8px; }
 .mt-3 { margin-top: 12px; }
 .mb-1 { margin-bottom: 4px; }
@@ -661,10 +666,11 @@ label {
 .text-muted { color: var(--text-muted); }
 .text-amber { color: var(--primary); }
 .text-danger { color: var(--danger); }
+.text-success { color: var(--success); }
 .text-xs { font-size: 0.75rem; }
 .text-sm { font-size: 0.85rem; }
 
-/* --- KASIR POS (TAHAP 3) --- */
+/* --- KASIR POS --- */
 .nav-title-center {
   display: flex;
   flex-direction: column;
@@ -678,7 +684,7 @@ label {
 }
 
 .pos-body {
-  padding-bottom: 90px; /* Ruang untuk bottom bar */
+  padding-bottom: 90px;
 }
 
 .btn-cart-badge {
@@ -924,6 +930,13 @@ label {
   border: 1px solid var(--success);
 }
 
+.pay-badge-void {
+  background-color: rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+  border: 1px solid var(--danger);
+  font-weight: 800;
+}
+
 .pay-methods-accordion {
   display: flex;
   flex-direction: column;
@@ -949,21 +962,7 @@ label {
   font-size: 0.8rem;
 }
 
-.success-icon {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  background-color: rgba(16, 185, 129, 0.2);
-  border: 2px solid var(--success);
-  color: var(--success);
-  font-size: 2rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 12px;
-}
-
-/* --- TAHAP 4: BUKU BON DIGITAL --- */
+/* --- BUKU BON DIGITAL --- */
 .text-right {
   text-align: right;
 }
@@ -1116,7 +1115,7 @@ label {
   height: 18px;
 }
 
-/* --- TAHAP 5: SHIFT KASIR & LAPORAN --- */
+/* --- SHIFT KASIR & LAPORAN --- */
 .shift-hero-card {
   background: linear-gradient(135deg, #1e293b 0%, #172033 100%);
   border: 1px solid var(--border-color);
@@ -1281,4 +1280,60 @@ label {
   font-weight: 800;
   font-size: 0.75rem;
   margin-right: 6px;
+}
+
+/* --- TAHAP 6: STRUK TRANSAKSI & PAPER DESIGN --- */
+.modal-receipt-card {
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.receipt-paper {
+  background-color: #0b1322;
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  font-family: monospace, monospace;
+}
+
+.receipt-brand {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.receipt-divider {
+  border-bottom: 1px dashed var(--border-color);
+  margin: 8px 0;
+}
+
+.receipt-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.receipt-item-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.82rem;
+}
+
+.receipt-payments {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.8rem;
+  margin-top: 6px;
+}
+
+.receipt-void-banner {
+  background-color: rgba(239, 68, 68, 0.25);
+  border: 1px solid var(--danger);
+  color: #fca5a5;
+  padding: 6px;
+  border-radius: 6px;
+  text-align: center;
+  margin: 8px 0;
 }

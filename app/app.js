@@ -293,7 +293,7 @@ async function calibrateIterations() {
   const enc = new TextEncoder();
   const dummyPass = enc.encode('benchmark-pass-123');
   const dummySalt = crypto.getRandomValues(new Uint8Array(16));
-  const testIterations = 50000;
+  const testIterations = 100000;
 
   const keyMaterial = await crypto.subtle.importKey('raw', dummyPass, { name: 'PBKDF2' }, false, ['deriveKey']);
   const t0 = performance.now();
@@ -308,6 +308,7 @@ async function calibrateIterations() {
   const timePerIteration = elapsed / testIterations;
   let targetIterations = Math.round(350 / (timePerIteration || 0.002));
   if (targetIterations < 100000) targetIterations = 100000;
+  if (targetIterations > 1000000) targetIterations = 1000000;
   return targetIterations;
 }
 
@@ -4612,6 +4613,10 @@ function setupEventListeners() {
 
   // Event Modal Void (Tahap 6)
   document.getElementById('btn-close-modal-void').addEventListener('click', () => {
+    document.getElementById('modal-void').classList.add('hidden');
+  });
+
+  document.getElementById('btn-close-modal-void-x').addEventListener('click', () => {
     document.getElementById('modal-void').classList.add('hidden');
   });
 

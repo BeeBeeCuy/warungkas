@@ -4,7 +4,7 @@
  * Versi Cache: warungkas-v6
  */
 
-const CACHE_NAME = 'warungkas-v6';
+const CACHE_NAME = 'warungkas-v6.1';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
